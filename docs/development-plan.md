@@ -1,6 +1,6 @@
 # Wuwa Draw 現行規格與開發計畫
 
-> 唯一現行產品與實作規格；[詞彙](../CONTEXT.md)、[隔離決策](adr/0001-streamer-isolation.md)、[取消決策](adr/0002-cancellation-compensation.md)。本文為交接目標，非已實作或測試結果。根目錄為本 repository 根目錄，名稱確定為 Wuwa Draw。
+> 唯一現行產品與實作規格；[詞彙](../CONTEXT.md)、[隔離決策](adr/0001-streamer-isolation.md)、[取消決策](adr/0002-cancellation-compensation.md)。本文為產品目標，非完成宣告；issue #8 的本機窄路徑及其限制見[實測證據](issue-8-evidence.md)。根目錄為本 repository 根目錄，名稱確定為 Wuwa Draw。
 
 ## 1. 產品邊界與權限
 
