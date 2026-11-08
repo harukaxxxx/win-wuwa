@@ -1,4 +1,4 @@
-interface Env { DB: D1Database; ASSETS: Fetcher; DISCORD_CLIENT_ID?: string; DISCORD_CLIENT_SECRET?: string; ORIGIN?: string }
+interface Env { DB: D1Database; ASSETS: Fetcher; DISCORD_CLIENT_ID?: string; DISCORD_CLIENT_SECRET?: string; ADMIN_DISCORD_ID?: string; ORIGIN?: string }
 const headers = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 const json = (x: unknown, status = 200) => Response.json(x, { status, headers });
 const random = () => Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, '0')).join('');
@@ -38,13 +38,33 @@ async function handler(req: Request, env: Env): Promise<Response> {
  if (u.pathname.startsWith('/api/')) {
   const s = await session(req,env); if (!s) return json({error:'unauthenticated'},401);
   if (req.method !== 'GET') { const c = req.headers.get('X-CSRF-Token') ?? ''; if (!origin || u.origin !== origin || req.headers.get('Origin') !== origin || !/^[a-f0-9]{64}$/.test(c) || await hash(c) !== s.csrf_hash) return json({error:'csrf'},403); }
-  if (u.pathname === '/api/session' && req.method === 'GET') { const c=cookie(req,'__Host-csrf'); if (!/^[a-f0-9]{64}$/.test(c) || await hash(c)!==s.csrf_hash) return json({error:'session invalid'},401); const approved=await env.DB.prepare('SELECT user_id FROM approved_streamers WHERE user_id=?').bind(s.user_id).first(); return json({csrf:c,approved:!!approved}); }
+  const admin=!!env.ADMIN_DISCORD_ID && /^\d{1,32}$/.test(env.ADMIN_DISCORD_ID) && s.user_id===env.ADMIN_DISCORD_ID;
+  if (u.pathname === '/api/session' && req.method === 'GET') { const c=cookie(req,'__Host-csrf'); if (!/^[a-f0-9]{64}$/.test(c) || await hash(c)!==s.csrf_hash) return json({error:'session invalid'},401); const approved=await env.DB.prepare("SELECT user_id FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); return json({csrf:c,approved:!!approved,admin}); }
   if (u.pathname === '/api/logout' && req.method === 'POST') { await env.DB.prepare('DELETE FROM sessions WHERE session_hash=?').bind(await hash(cookie(req,'__Host-session'))).run(); const h=new Headers(headers); h.append('Set-Cookie',setCookie('__Host-session','',0)); h.append('Set-Cookie',setCookie('__Host-csrf','',0)); return new Response(null,{status:204,headers:h}); }
+  if (u.pathname.startsWith('/api/admin/')) {
+   if (!admin) return json({error:'forbidden'},403);
+   if (u.pathname==='/api/admin/usage' && req.method==='GET') { if(u.search) return json({error:'invalid query'},400); const day=Math.floor(now()/86400); const row=await env.DB.prepare('SELECT starts FROM login_budget WHERE day=?').bind(day).first<{starts:number}>(); return json({utc_day:day,login_starts:row?.starts ?? 0,scope:'admitted_login_starts'}); }
+   const match=u.pathname.match(/^\/api\/admin\/streamers\/(\d{1,32})$/);
+   if (match && req.method==='GET') { if(u.search) return json({error:'invalid query'},400); const row=await env.DB.prepare('SELECT user_id,status,version FROM approved_streamers WHERE user_id=?').bind(match[1]).first(); return row ? json(row) : json({error:'not found'},404); }
+   if (match && req.method==='PUT') {
+    let body: unknown; try { body=await req.json(); } catch { return json({error:'invalid'},400); }
+    if (!body || typeof body!=='object' || Array.isArray(body)) return json({error:'invalid'},400);
+    const b=body as Record<string,unknown>;
+    if (Object.keys(b).sort().join(',')!=='status,version' || !['approved','disabled'].includes(b.status as string) || !Number.isSafeInteger(b.version) || (b.version as number)<0) return json({error:'invalid'},400);
+    const ver=b.version as number;
+    const row=ver===0 && b.status==='approved' ? await env.DB.prepare("INSERT INTO approved_streamers(user_id,status,version) VALUES (?,'approved',1) ON CONFLICT(user_id) DO NOTHING RETURNING status,version").bind(match[1]).first() : await env.DB.prepare('UPDATE approved_streamers SET status=?,version=version+CASE WHEN status=? THEN 0 ELSE 1 END WHERE user_id=? AND version=? RETURNING status,version').bind(b.status,b.status,match[1],ver).first();
+    if (row) return json(row);
+    if (ver===0 && b.status==='approved') { const existing=await env.DB.prepare("SELECT status,version FROM approved_streamers WHERE user_id=? AND status='approved' AND version=1").bind(match[1]).first(); if(existing) return json(existing); }
+    return json({error:'conflict'},409);
+   }
+   if (u.pathname==='/api/admin/streamers' && req.method==='GET') { const params=[...u.searchParams]; if(params.some(([k])=>k!=='cursor') || params.length>1 || (params.length===1 && !/^\d{1,32}$/.test(params[0][1]))) return json({error:'invalid query'},400); const cursor=params[0]?.[1] ?? ''; const rows=await env.DB.prepare('SELECT user_id,status,version FROM approved_streamers WHERE user_id>? ORDER BY user_id LIMIT 101').bind(cursor).all<{user_id:string;status:string;version:number}>(); const more=rows.results.length>100; const page=rows.results.slice(0,100); return json({streamers:page,has_more:more,next_cursor:more ? page[page.length-1].user_id : null}); }
+   return json({error:'not found'},404);
+  }
   if (u.pathname === '/api/environment') {
-   const approved=await env.DB.prepare('SELECT user_id FROM approved_streamers WHERE user_id=?').bind(s.user_id).first(); if (!approved) return json({error:'not approved'},403);
+   const approved=await env.DB.prepare("SELECT user_id FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); if (!approved) return json({error:'not approved'},403);
    if (req.method==='GET') { const row=await env.DB.prepare('SELECT value, version FROM environments WHERE owner_id=?').bind(s.user_id).first(); return json(row ?? {value:'',version:0}); }
-   if (req.method==='PUT') { let body: {value?:unknown;version?:unknown}; try { body=await req.json(); } catch { return json({error:'invalid'},400); } if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.value !== 'string' || body.value.length>2000 || !Number.isSafeInteger(body.version) || (body.version as number)<0) return json({error:'invalid'},400);
-    const ver=body.version as number; const stmt=ver===0 ? env.DB.prepare('INSERT INTO environments(owner_id,value,version) SELECT ?,?,1 WHERE EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=?) ON CONFLICT(owner_id) DO NOTHING RETURNING value,version').bind(s.user_id,body.value,s.user_id) : env.DB.prepare('UPDATE environments SET value=?,version=version+1 WHERE owner_id=? AND version=? AND EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=?) RETURNING value,version').bind(body.value,s.user_id,ver,s.user_id);
+   if (req.method==='PUT') { let body: {value?:unknown;version?:unknown}; try { body=await req.json(); } catch { return json({error:'invalid'},400); } if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).sort().join(',')!=='value,version' || typeof body.value !== 'string' || body.value.length>2000 || !Number.isSafeInteger(body.version) || (body.version as number)<0) return json({error:'invalid'},400);
+    const ver=body.version as number; const stmt=ver===0 ? env.DB.prepare("INSERT INTO environments(owner_id,value,version) SELECT ?,?,1 WHERE EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') ON CONFLICT(owner_id) DO NOTHING RETURNING value,version").bind(s.user_id,body.value,s.user_id) : env.DB.prepare("UPDATE environments SET value=?,version=version+1 WHERE owner_id=? AND version=? AND EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') RETURNING value,version").bind(body.value,s.user_id,ver,s.user_id);
     const row=await stmt.first(); return row ? json(row) : json({error:'conflict'},409);
    }
   }

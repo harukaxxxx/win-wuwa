@@ -10,8 +10,8 @@ const mf=new Miniflare({...convertV4MiniflareOptions({modules:true,scriptPath:'d
 try {
  if(mode==='commit') {
   const db=await mf.getD1Database('DB');
-  for(const f of ['migrations/0001_init.sql','migrations/0002_login_budget.sql']) for(const q of (await readFile(f,'utf8')).split(';').map(x=>x.trim()).filter(Boolean)) await db.prepare(q).run();
-  await db.prepare('INSERT INTO approved_streamers VALUES (?)').bind('10').run();
+  for(const f of ['migrations/0001_init.sql','migrations/0002_login_budget.sql','migrations/0003_streamer_status.sql']) for(const q of (await readFile(f,'utf8')).split(';').map(x=>x.trim()).filter(Boolean)) await db.prepare(q).run();
+  await db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind('10').run();
   await db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').bind(digest(sid),'10',digest(csrf),Math.floor(Date.now()/1000)+300).run();
   const res=await mf.dispatchFetch(origin+'/api/environment',{method:'PUT',headers,body:JSON.stringify({value:'committed',version:0})});
   const body=await res.json();

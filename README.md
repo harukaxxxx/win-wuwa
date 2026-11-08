@@ -8,6 +8,12 @@
 
 目前有 issue #8 **隔離合成資料**的窄路徑原型，另可選擇僅供可信任區網的測試入口；其餘功能及正式部署尚未完成。實測範圍、官方資料、限制及未完成關卡見 [issue #8 證據](docs/issue-8-evidence.md)。登入不授予主播資格；本機測試資料中的核准不決定正式管理政策。
 
+## Issue #9 本機開發中（尚未完成）
+
+本分支新增保留原有資料的 `0003_streamer_status.sql`、以 `ADMIN_DISCORD_ID` 精確比對登入身分的管理 API、管理介面及停用時的寫入資格檢查。清單以 ID 字串順序 keyset 分頁；變動中的清單不是一致快照，重新讀取可重新開始。登入啟動量只讀取現有 UTC 日登入額度計數（每次管理頁讀取增加一次 D1 查詢），是實際通過站內額度的登入啟動數，不含被拒或 OAuth 尚未設定的請求，也不是 Cloudflare 帳戶用量、剩餘額度或完整服務請求量；不儲存個人明細。詳見 [issue #9 證據](docs/issue-9-evidence.md)。
+
+所有本地資料庫須先套用新 migration；未設定或格式錯誤的管理者 ID 不賦予管理權。合成 Chromium 測試涵蓋首次核准前中斷及 404 後手動重試、丟失 PUT 回應的保守狀態顯示、第二頁操作和讀回失敗後重試；這些均非真 Discord 或實際裝置驗收。共用配額監控留待 #22；站內 UTC 登入啟動計數不是 Cloudflare 配額。真 Discord、實際裝置及後續 session 整合仍待驗證，不可部署或用真帳號驗收此未完成分支。
+
 ## 本機執行
 
 需要 Node 22。以下只建立與使用本機 `.wrangler/` D1，不建立遠端資源：
@@ -18,7 +24,7 @@ npx wrangler d1 migrations apply win-wuwa-local --local
 npm run dev -- --port 19387
 ```
 
-在同一台電腦開啟 `http://127.0.0.1:19387/`。未設定 OAuth 時登入回 503；這不是 fixture 登入。測試以 `npm run typecheck`、`npm test` 執行。登入 Discord 需既有、另行授權的 app，精確註冊 `http://127.0.0.1:19387/auth/callback`（實際 Discord 是否允許該註冊及完整流程尚未驗證）；自行透過安全本機方式設定 Wrangler 本地秘密 `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET` 及 `ORIGIN=http://127.0.0.1:19387`，不要在聊天提供秘密。不要將 `.dev.vars` 提交。使用者必須已有隔離測試用 `approved_streamers` 行才可存讀，原型不提供核准 UI 或正式開通政策。預設沒有核准行；自動測試僅插入合成 ID。停止伺服器用 Ctrl-C。
+在同一台電腦開啟 `http://127.0.0.1:19387/`。未設定 OAuth 時登入回 503；這不是 fixture 登入。測試以 `npm run typecheck`、`npm test` 執行。登入 Discord 需既有、另行授權的 app，精確註冊 `http://127.0.0.1:19387/auth/callback`（實際 Discord 是否允許該註冊及完整流程尚未驗證）；自行透過安全本機方式設定 Wrangler 本地秘密 `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET` 及 `ORIGIN=http://127.0.0.1:19387`，不要在聊天提供秘密。不要將 `.dev.vars` 提交。使用者必須已核准才可存讀；管理資格需要另行配置 `ADMIN_DISCORD_ID`。測試僅使用合成 ID。停止伺服器用 Ctrl-C。
 
 此原型以本機 SQL 每 UTC 日限制最多 1000 次登入啟動、最多各 1000 筆 state/session，登入時分批清理過期紀錄；這是原型內部保護，不是已核准的產品限額。額度被耗盡會拒絕其他使用者，且這不是完整抗 DoS 或正式營運保護。不得對外公開或部署；遠端 D1、真實 Discord、帳戶額度與使用者裝置均未驗收。
 

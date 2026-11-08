@@ -11,8 +11,8 @@ test('graceful runtime recreation preserves commits and stale retry conflicts', 
  const make=()=>new Miniflare({...convertV4MiniflareOptions({modules:true,scriptPath:'dist/index.js',compatibilityDate:'2026-07-30',d1Databases:['DB'],bindings:{ORIGIN:origin}}),resourcePersistencePath:dir});
  try {
   mf=make(); let db=await mf.getD1Database('DB');
-  for(const f of ['migrations/0001_init.sql','migrations/0002_login_budget.sql']) for(const q of (await readFile(f,'utf8')).split(';').map(x=>x.trim()).filter(Boolean)) await db.prepare(q).run();
-  await db.prepare('INSERT INTO approved_streamers VALUES (?)').bind('10').run();
+  for(const f of ['migrations/0001_init.sql','migrations/0002_login_budget.sql','migrations/0003_streamer_status.sql']) for(const q of (await readFile(f,'utf8')).split(';').map(x=>x.trim()).filter(Boolean)) await db.prepare(q).run();
+  await db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind('10').run();
   await db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').bind(digest(sid),'10',digest(csrf),Math.floor(Date.now()/1000)+300).run();
   const headers={Cookie:`__Host-session=${sid}`,Origin:origin,'X-CSRF-Token':csrf,'Content-Type':'application/json'};
   const put=(v,version)=>mf.dispatchFetch(origin+'/api/environment',{method:'PUT',headers,body:JSON.stringify({value:v,version})});

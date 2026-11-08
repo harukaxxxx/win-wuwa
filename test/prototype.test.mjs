@@ -25,7 +25,7 @@ const options=convertV4MiniflareOptions({modules:true,scriptPath:'dist/index.js'
 }});
 const mf=new Miniflare({...options,log,handleStructuredLogs:entry=>logs.push(JSON.stringify(entry))});
 const db=await mf.getD1Database('DB');
-for(const file of ['migrations/0001_init.sql','migrations/0002_login_budget.sql']) for(const sql of (await readFile(file,'utf8')).split(';').map(x=>x.trim()).filter(Boolean)) await db.prepare(sql).run();
+for(const file of ['migrations/0001_init.sql','migrations/0002_login_budget.sql','migrations/0003_streamer_status.sql']) for(const sql of (await readFile(file,'utf8')).split(';').map(x=>x.trim()).filter(Boolean)) await db.prepare(sql).run();
 const fetcher=(path,opts={})=>mf.dispatchFetch(origin+path,{redirect:'manual',...opts});
 const cookieString=r=>r.headers.getSetCookie().map(x=>x.split(';')[0]).join('; ');
 let sessionCookie,csrf;
@@ -42,7 +42,7 @@ test('OAuth state, PKCE, secure cookies, replay and no secret exposure',async()=
  const info=await fetcher('/api/session',{headers:{Cookie:sessionCookie}}); const data=await info.json(); csrf=data.csrf; assert.equal(data.approved,false); assert.equal((await fetcher('/api/environment',{headers:{Cookie:sessionCookie}})).status,403);
 });
 test('owner-only environment, csrf and concurrent CAS',async()=>{
- await db.prepare('INSERT INTO approved_streamers VALUES (?)').bind('123').run();
+ await db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind('123').run();
  const base={Cookie:sessionCookie,Origin:origin,'X-CSRF-Token':csrf,'Content-Type':'application/json'};
  for (const body of ['null','[]','42','"text"']) assert.equal((await fetcher('/api/environment',{method:'PUT',headers:base,body})).status,400);
  assert.equal((await fetcher('/api/session',{headers:{Cookie:sessionCookie.replaceAll('; ',';')}})).status,200);
@@ -55,13 +55,13 @@ test('owner-only environment, csrf and concurrent CAS',async()=>{
  assert.deepEqual(await (await fetcher('/api/environment',{headers:{Cookie:sessionCookie}})).json(),row);
 });
 test('real D1 unique constraints and failed atomic batch rollback',async()=>{
- await assert.rejects(db.prepare('INSERT INTO approved_streamers VALUES (?)').bind('123').run());
- await assert.rejects(db.batch([db.prepare('INSERT INTO approved_streamers VALUES (?)').bind('456'),db.prepare('INSERT INTO approved_streamers VALUES (?)').bind('123')]));
+ await assert.rejects(db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind('123').run());
+ await assert.rejects(db.batch([db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind('456'),db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind('123')]));
  assert.equal(await db.prepare('SELECT user_id FROM approved_streamers WHERE user_id=?').bind('456').first(),null);
 });
 test('second approved identity cannot read or alter first environment',async()=>{
  const sid='b'.repeat(64), c='c'.repeat(64), digest=x=>createHash('sha256').update(x).digest('hex');
- await db.prepare('INSERT INTO approved_streamers VALUES (?)').bind('789').run();
+ await db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind('789').run();
  await db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').bind(digest(sid),'789',digest(c),Math.floor(Date.now()/1000)+300).run();
  const headers={Cookie:`__Host-session=${sid}`,Origin:origin,'X-CSRF-Token':c,'Content-Type':'application/json'};
  assert.deepEqual(await (await fetcher('/api/environment',{headers})).json(),{value:'',version:0});
