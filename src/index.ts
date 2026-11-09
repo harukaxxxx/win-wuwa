@@ -1,6 +1,7 @@
 import {draw} from './draw';
 import {settle} from './settlement';
 import {cancel} from './cancellation';
+import {retention} from './retention';
 import {publicResults,chance,roster,ownedActivities} from './results';
 interface Env { DB: D1Database; ASSETS: Fetcher; DISCORD_CLIENT_ID?: string; DISCORD_CLIENT_SECRET?: string; ADMIN_DISCORD_ID?: string; ORIGIN?: string }
 const headers = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
@@ -44,7 +45,7 @@ async function handler(req: Request, env: Env): Promise<Response> {
   const budget=await env.DB.prepare('INSERT INTO login_budget VALUES (?,1) ON CONFLICT(day) DO UPDATE SET starts=starts+1 WHERE starts<1000 RETURNING starts').bind(day).first(); if (!budget) return json({error:'login capacity'},503);
   await env.DB.batch([env.DB.prepare('DELETE FROM oauth_states WHERE state_hash IN (SELECT state_hash FROM oauth_states WHERE expires<=? LIMIT 100)').bind(now()),env.DB.prepare('DELETE FROM sessions WHERE session_hash IN (SELECT session_hash FROM sessions WHERE expires<=? LIMIT 100)').bind(now())]);
   const state = random(), verifier = random(); const admitted = await env.DB.prepare('INSERT INTO oauth_states SELECT ?,?,? WHERE (SELECT COUNT(*) FROM oauth_states)<1000 RETURNING state_hash').bind(await hash(state), now()+300, verifier).first(); if (!admitted) return json({error:'login capacity'},503);
-  if(context) { await env.DB.batch([env.DB.prepare('DELETE FROM viewer_oauth_context WHERE expires<=?').bind(now()),env.DB.prepare('DELETE FROM viewer_login_intents WHERE expires<=?').bind(now()),env.DB.prepare('INSERT INTO viewer_oauth_context (state_hash,owner_id,activity_id,rule_version,expires,guild_id) VALUES (?,?,?,?,?,?)').bind(await hash(state),context.owner,context.id,context.version,now()+300,context.guild)]); }
+  if(context) { await env.DB.batch([env.DB.prepare('DELETE FROM viewer_oauth_context WHERE expires<=?').bind(now()),env.DB.prepare('DELETE FROM viewer_login_intents WHERE expires<=?').bind(now()),env.DB.prepare("INSERT INTO viewer_oauth_context (state_hash,owner_id,activity_id,rule_version,expires,guild_id) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM activities WHERE id=? AND owner_id=? AND rule_version=? AND NOT EXISTS (SELECT 1 FROM activity_tombstones t WHERE t.id=activities.id))").bind(await hash(state),context.owner,context.id,context.version,now()+300,context.guild,context.id,context.owner,context.version)]); }
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   const a = new URL('https://discord.com/oauth2/authorize'); a.search = new URLSearchParams({ client_id: env.DISCORD_CLIENT_ID, redirect_uri: origin + '/auth/callback', response_type: 'code', scope: context?.guild ? 'identify guilds.members.read' : 'identify', state, code_challenge: challenge, code_challenge_method:'S256' }).toString();
@@ -80,9 +81,9 @@ async function handler(req: Request, env: Env): Promise<Response> {
      else if(response.status===429) { status='rate'; try { const body=await response.json<{retry_after?:unknown}>(); if(typeof body.retry_after==='number' && Number.isFinite(body.retry_after) && body.retry_after>=0) retryAfter=body.retry_after; } catch {} }
      else if(response.ok) { const body:unknown=await response.json(); if(memberValid(body,user.id)) { status=body.pending ? 'pending' : 'member'; if(status==='member') nickname=name(body.nick); } }
     } catch {}
-    await env.DB.batch([env.DB.prepare('DELETE FROM guild_membership_proofs WHERE expires<=?').bind(now()),env.DB.prepare('INSERT INTO guild_membership_proofs (session_hash,user_id,owner_id,activity_id,rule_version,guild_id,status,retry_after,expires,nickname) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(sidHash,user.id,context.owner_id,context.activity_id,context.rule_version,context.guild_id,status,retryAfter,now()+300,nickname)]);
+    await env.DB.batch([env.DB.prepare('DELETE FROM guild_membership_proofs WHERE expires<=?').bind(now()),env.DB.prepare("INSERT INTO guild_membership_proofs (session_hash,user_id,owner_id,activity_id,rule_version,guild_id,status,retry_after,expires,nickname) SELECT ?,?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM activities WHERE id=? AND owner_id=? AND rule_version=? AND NOT EXISTS (SELECT 1 FROM activity_tombstones t WHERE t.id=activities.id))").bind(sidHash,user.id,context.owner_id,context.activity_id,context.rule_version,context.guild_id,status,retryAfter,now()+300,nickname,context.activity_id,context.owner_id,context.rule_version)]);
    }
-   const intent=random(); await env.DB.prepare('INSERT INTO viewer_login_intents VALUES (?,?,?,?,?,?)').bind(await hash(intent),sidHash,context.owner_id,context.activity_id,context.rule_version,now()+1800).run(); destination='/s/'+context.owner_id+'?intent='+intent;
+   const intent=random(); await env.DB.prepare("INSERT INTO viewer_login_intents SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM activities WHERE id=? AND owner_id=? AND rule_version=? AND NOT EXISTS (SELECT 1 FROM activity_tombstones t WHERE t.id=activities.id))").bind(await hash(intent),sidHash,context.owner_id,context.activity_id,context.rule_version,now()+1800,context.activity_id,context.owner_id,context.rule_version).run(); destination='/s/'+context.owner_id+'?intent='+intent;
   }
   return redirect(destination,[setCookie('__Host-session',sid,28800),setCookie(context?'__Host-oauth-'+state:'__Host-oauth','',0),setCookie('__Host-csrf',csrf,28800)]);
  }
@@ -153,6 +154,7 @@ async function handler(req: Request, env: Env): Promise<Response> {
   }
   if (u.pathname.startsWith('/api/admin/')) {
    if (!admin) return json({error:'forbidden'},403);
+   if (u.pathname==='/api/admin/history-retention') return retention(req,env.DB,s.user_id,await hash(cookie(req,'__Host-session')));
    if (u.pathname==='/api/admin/usage' && req.method==='GET') { if(u.search) return json({error:'invalid query'},400); const day=Math.floor(now()/86400); const row=await env.DB.prepare('SELECT starts FROM login_budget WHERE day=?').bind(day).first<{starts:number}>(); return json({utc_day:day,login_starts:row?.starts ?? 0,scope:'admitted_login_starts'}); }
    const match=u.pathname.match(/^\/api\/admin\/streamers\/(\d{1,32})$/);
    if (match && req.method==='GET') { if(u.search) return json({error:'invalid query'},400); const row=await env.DB.prepare('SELECT user_id,status,version FROM approved_streamers WHERE user_id=?').bind(match[1]).first(); return row ? json(row) : json({error:'not found'},404); }
@@ -232,7 +234,7 @@ async function handler(req: Request, env: Env): Promise<Response> {
     if(!results[0].meta.changes) { const retry=await lookup(); if(retry) return retry.guild_id===guild && retry.guild_invite_url===invite && retry.expected_generation===expected ? json({activity:retry}) : json({error:'conflict'},409); const approved=await env.DB.prepare("SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); return approved ? json({error:'conflict'},409) : json({error:'not approved'},403); }
    } catch {
     const retry=await lookup(); if(retry) return retry.rule_version===1 && retry.guild_id===guild && retry.guild_invite_url===invite && retry.expected_generation===expected ? json({activity:retry}) : json({error:'conflict'},409);
-    const conflict=await env.DB.prepare("SELECT 1 FROM activities WHERE id=? OR (owner_id=? AND status IN ('initializing','open','paused','settling','cancelling')) LIMIT 1").bind(id,s.user_id).first();
+    const conflict=await env.DB.prepare("SELECT 1 FROM activities WHERE id=? OR (owner_id=? AND status IN ('initializing','open','paused','settling','cancelling')) UNION ALL SELECT 1 FROM activity_tombstones WHERE id=? LIMIT 1").bind(id,s.user_id,id).first();
     return conflict ? json({error:'conflict'},409) : json({error:'request failed'},500);
    }
    const created=await lookup(); return created ? json({activity:created},201) : json({error:'not approved'},403);
