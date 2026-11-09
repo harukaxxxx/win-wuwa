@@ -11,6 +11,8 @@ const lan = process.env.WUWA_LAN_PREVIEW === undefined ? null : lanConfig(proces
 const managementQA = process.env.WUWA_MANAGEMENT_QA === '1' && !lan;
 const viewerQA = process.env.WUWA_VIEWER_QA === '1' && !lan;
 const statusQA = process.env.WUWA_STATUS_QA === '1' && viewerQA && managementQA && !lan;
+const drawQA = process.env.WUWA_DRAW_QA === '1' && statusQA;
+let dropDraw=false,failDrawRead=false;
 let dropStatus=false,failStatusRead=false,dropWithdraw=false,failWithdrawRead=false,failOldSelf=false;
 const statusCalls=[];
 let viewerIdentity='300', pauseAuth=false, dropRegistration=false, failViewerSelf=false, blockRegistration=false;
@@ -44,7 +46,7 @@ const mf = new Miniflare(convertV4MiniflareOptions({
   }
 }));
 const db = await mf.getD1Database('DB');
-for (const file of ['migrations/0001_init.sql','migrations/0002_login_budget.sql','migrations/0003_streamer_status.sql','migrations/0004_activities.sql','migrations/0005_opening_generation.sql','migrations/0006_activity_defaults.sql',...(viewerQA?['migrations/0007_registrations.sql','migrations/0008_viewer_oauth.sql','migrations/0009_guild_proofs.sql']:[]),'migrations/0010_guild_invite.sql','migrations/0011_activity_status_version.sql']) {
+for (const file of ['migrations/0001_init.sql','migrations/0002_login_budget.sql','migrations/0003_streamer_status.sql','migrations/0004_activities.sql','migrations/0005_opening_generation.sql','migrations/0006_activity_defaults.sql',...(viewerQA?['migrations/0007_registrations.sql','migrations/0008_viewer_oauth.sql','migrations/0009_guild_proofs.sql']:[]),'migrations/0010_guild_invite.sql','migrations/0011_activity_status_version.sql',...(drawQA?['migrations/0012_draws.sql']:[])]) {
   for (const sql of (await readFile(file, 'utf8')).split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(sql).run();
 }
 await db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind('123').run();
@@ -56,6 +58,8 @@ const server = createServer(async (req, res) => {
     if (lan && (req.rawHeaders.filter((_, i) => i % 2 === 0 && req.rawHeaders[i].toLowerCase() === 'host').length !== 1 || !allowedLanRequest(lan, req.headers.host, req.socket.remoteAddress))) { res.writeHead(403); res.end('Forbidden'); return; }
     const url = new URL(req.url, origin);
     if (url.origin !== origin) { res.writeHead(403); res.end('Forbidden'); return; }
+    if(drawQA && url.pathname==='/__fixture/draw' && req.method==='POST'){const chunks=[];for await(const c of req)chunks.push(c);const mode=Buffer.concat(chunks).toString();if(mode==='drop'){dropDraw=true;failDrawRead=true;}else if(mode==='seed')await db.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123','301',2)").run();else {res.writeHead(400);res.end();return;}res.end('armed');return;}
+    if(drawQA && url.pathname==='/__fixture/draw' && req.method==='GET'){const draws=await db.prepare('SELECT winner_ordinal,request_key FROM draws').all();const regs=await db.prepare('SELECT viewer_id,ordinal,status FROM registrations ORDER BY ordinal').all();res.setHeader('content-type','application/json');res.end(JSON.stringify({draws:draws.results,registrations:regs.results,calls:statusCalls}));return;}
     if(statusQA && url.pathname==='/__fixture/status' && req.method==='GET'){const activities=await db.prepare('SELECT id,status,status_version,rule_version FROM activities ORDER BY created_at').all();const registrations=await db.prepare('SELECT activity_id,viewer_id,status,ordinal FROM registrations ORDER BY activity_id,viewer_id').all();res.setHeader('content-type','application/json');res.end(JSON.stringify({calls:statusCalls,activities:activities.results,registrations:registrations.results}));return;}
     if(statusQA && url.pathname==='/__fixture/status' && req.method==='POST'){const chunks=[];for await(const c of req)chunks.push(c);const mode=Buffer.concat(chunks).toString();if(mode==='drop-status'){dropStatus=true;failStatusRead=true;}else if(mode==='drop-withdraw'){dropWithdraw=true;failWithdrawRead=true;}else if(mode==='fail-self')failViewerSelf=true;else if(mode==='fail-old-self')failOldSelf=true;else if(mode==='owner')viewerIdentity='123';else if(mode==='viewer')viewerIdentity='300';else if(mode==='reset-calls')statusCalls.length=0;else if(mode==='terminate')await db.prepare("UPDATE activities SET status='cancelled' WHERE owner_id='123' AND status IN ('open','paused')").run();else if(mode==='new')await db.prepare("INSERT INTO activities(id,owner_id,status,rule_version,guild_id,created_at) VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','123','open',1,NULL,2)").run();else {res.writeHead(400);res.end();return;}res.end('armed');return;}
     if(guildQA && url.pathname==='/__fixture/guild' && req.method==='GET'){res.setHeader('content-type','application/json');res.end(JSON.stringify({memberMode,outboundCalls,authorizationRequests}));return;}
@@ -76,6 +80,7 @@ const server = createServer(async (req, res) => {
       console.log('fixture authorize -> callback 302'); return;
     }
     const chunks=[]; for await (const chunk of req) chunks.push(chunk);
+    if(drawQA && /^\/api\/activities\/[0-9a-f-]+\/draws\//.test(url.pathname))statusCalls.push({method:req.method,url:url.pathname});
     if(statusQA && (/^\/api\/activities\/[0-9a-f-]+\/status$/.test(url.pathname)||/^\/api\/viewer\/123\/(self|withdraw|register)$/.test(url.pathname)))statusCalls.push({method:req.method,url:url.pathname+url.search,body:Buffer.concat(chunks).toString()});
     const headers = new Headers(); for (const [name,value] of Object.entries(req.headers)) if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
     if (lan) { headers.delete('cookie'); const cookies = toWorkerCookies(req.headers.cookie); if (cookies) headers.set('cookie', cookies); }
@@ -83,6 +88,8 @@ const server = createServer(async (req, res) => {
     if(managementQA && blockActivity && req.method==='PUT' && /^\/api\/activities\/[0-9a-f-]+$/.test(url.pathname)){blockActivity=false;console.log(`fixture blocked activity before write ${url.pathname}`);res.writeHead(200,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
     if(viewerQA && req.method==='POST' && url.pathname==='/api/viewer/123/register' && blockRegistration){blockRegistration=false;console.log('fixture blocked registration before write');res.writeHead(200,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
     const response = await mf.dispatchFetch(url.href, { method: req.method, headers, body: ['GET','HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks), redirect: 'manual' });
+    if(drawQA && req.method==='PUT' && /\/draws\//.test(url.pathname) && dropDraw){dropDraw=false;await response.arrayBuffer();res.writeHead(response.status,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
+    if(drawQA && req.method==='GET' && /\/draws\//.test(url.pathname) && failDrawRead){failDrawRead=false;res.writeHead(503);res.end();return;}
     if(statusQA && req.method==='PUT' && /^\/api\/activities\/[0-9a-f-]+\/status$/.test(url.pathname) && dropStatus){dropStatus=false;await response.arrayBuffer();console.log(`fixture truncate status after worker response ${response.status}`);res.writeHead(response.status,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
     if(statusQA && req.method==='POST' && url.pathname==='/api/viewer/123/withdraw' && dropWithdraw){dropWithdraw=false;await response.arrayBuffer();console.log(`fixture truncate withdraw after worker response ${response.status}`);res.writeHead(response.status,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
     if(statusQA && req.method==='GET' && /^\/api\/activities\/[0-9a-f-]+\/status$/.test(url.pathname) && failStatusRead){failStatusRead=false;res.writeHead(503);res.end();return;}

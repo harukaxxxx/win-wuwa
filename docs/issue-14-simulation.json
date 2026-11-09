@@ -1,0 +1,34 @@
+{
+  "seed": "0x14ac2026",
+  "sessions": 10000,
+  "draws_per_session": 3,
+  "initial_scores": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    0
+  ],
+  "winner_counts": [
+    1728,
+    2049,
+    2101,
+    2342,
+    2388,
+    2658,
+    2702,
+    2834,
+    3078,
+    3096,
+    3301,
+    1723
+  ],
+  "scope": "independent synthetic sessions; no settlement or persistent scores"
+}
