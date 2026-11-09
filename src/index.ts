@@ -1,4 +1,5 @@
 import {draw} from './draw';
+import {settle} from './settlement';
 interface Env { DB: D1Database; ASSETS: Fetcher; DISCORD_CLIENT_ID?: string; DISCORD_CLIENT_SECRET?: string; ADMIN_DISCORD_ID?: string; ORIGIN?: string }
 const headers = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 const json = (x: unknown, status = 200) => Response.json(x, { status, headers });
@@ -101,7 +102,7 @@ async function handler(req: Request, env: Env): Promise<Response> {
    const activity=await env.DB.prepare('SELECT status,guild_id FROM activities WHERE id=? AND owner_id=? AND rule_version=?').bind(id,self[1],version).first<{status:string;guild_id:string|null}>();
    if(!activity)return json({error:'stale activity or rules'},409);
    const row=await env.DB.prepare('SELECT ordinal,status FROM registrations WHERE activity_id=? AND owner_id=? AND viewer_id=?').bind(id,self[1],s.user_id).first();
-   const result=row ?? {ordinal:null,status:null};
+   const result={...(row ?? {ordinal:null,status:null}),...(activity.status==='settling'?{activity_status:'settling'}:{})};
    if(activity.guild_id!==null) { const proof=await env.DB.prepare('SELECT status,retry_after FROM guild_membership_proofs WHERE session_hash=? AND user_id=? AND owner_id=? AND activity_id=? AND rule_version=? AND guild_id=? AND expires>?').bind(await hash(cookie(req,'__Host-session')),s.user_id,self[1],id,version,activity.guild_id,now()).first(); return json({...result,membership:proof ?? {status:'reauth',retry_after:null},...(['cancelled','settled'].includes(activity.status)?{terminal:true}:{})}); }
    return json(['cancelled','settled'].includes(activity.status) ? {...result,terminal:true} : result);
   }
@@ -173,12 +174,16 @@ async function handler(req: Request, env: Env): Promise<Response> {
   if (u.pathname === '/api/activities/current' && req.method==='GET') {
    if(u.search) return json({error:'invalid query'},400);
    const state=await env.DB.prepare("SELECT COALESCE((SELECT generation FROM activity_opening_generations WHERE owner_id=?),0) AS opening_generation, (SELECT json_object('id',id,'status',status,'status_version',status_version,'rule_version',rule_version,'guild_id',guild_id,'guild_invite_url',guild_invite_url,'created_at',created_at,'expected_generation',expected_generation) FROM activities WHERE owner_id=? AND status IN ('initializing','open','paused','settling','cancelling')) AS activity").bind(s.user_id,s.user_id).first<{opening_generation:number;activity:string|null}>();
-   return json({activity:state?.activity ? JSON.parse(state.activity) : null,opening_generation:state?.opening_generation ?? 0});
+   const activity=state?.activity ? JSON.parse(state.activity) as {id:string;status:string} : null;
+   if(activity?.status==='settling'){const progress=await env.DB.prepare("SELECT cursor<>'' AS processed FROM activity_settlements WHERE activity_id=? AND owner_id=?").bind(activity.id,s.user_id).first<{processed:number}>();return json({activity:{...activity,settlement_progress:{processed:progress?.processed===1}},opening_generation:state?.opening_generation ?? 0});}
+   return json({activity,opening_generation:state?.opening_generation ?? 0});
   }
   const latestDraw=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/draw-results\/latest$/);
   if(latestDraw && req.method==='GET') {if(u.search)return json({error:'invalid query'},400);const row=await env.DB.prepare('SELECT winner_ordinal,rule_version,created_at FROM draws WHERE activity_id=? AND owner_id=? ORDER BY rowid DESC LIMIT 1').bind(latestDraw[1],s.user_id).first();return row?json({draw:row}):json({error:'not found'},404);}
   const drawMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/draws\/([A-Za-z0-9_-]{1,128})$/);
   if(drawMatch) return draw(req,env.DB,s.user_id,await hash(cookie(req,'__Host-session')),drawMatch[1],drawMatch[2]);
+  const settlementMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/settlements\/([A-Za-z0-9_-]{1,128})$/);
+  if(settlementMatch) return settle(req,env.DB,s.user_id,await hash(cookie(req,'__Host-session')),settlementMatch[1]);
   const statusMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/status$/);
   if(statusMatch && req.method==='GET') {if(u.search)return json({error:'invalid query'},400);const row=await env.DB.prepare('SELECT id,status,status_version,rule_version FROM activities WHERE id=? AND owner_id=?').bind(statusMatch[1],s.user_id).first();return row?json(row):json({error:'not found'},404);}
   if(statusMatch && req.method==='PUT') {

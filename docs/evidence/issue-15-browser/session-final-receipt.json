@@ -1,0 +1,838 @@
+{
+  "synthetic": true,
+  "draw": "本次中獎：報名序號 2",
+  "drawn": {
+    "scores": [
+      {
+        "viewer_id": "300",
+        "score": 3
+      },
+      {
+        "viewer_id": "301",
+        "score": 0
+      },
+      {
+        "viewer_id": "302",
+        "score": 6
+      },
+      {
+        "viewer_id": "303",
+        "score": 7
+      }
+    ],
+    "scoreCount": 1104,
+    "scoreDigest": "323d0f45fb6379a7943bbddb4eaf234969be84a17448b4c237fdc9b203e965ea",
+    "activities": [
+      {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "status": "open"
+      }
+    ],
+    "registrations": [
+      {
+        "viewer_id": "300",
+        "status": "withdrawn",
+        "ordinal": 1
+      },
+      {
+        "viewer_id": "301",
+        "status": "winner",
+        "ordinal": 2
+      },
+      {
+        "viewer_id": "302",
+        "status": "registered",
+        "ordinal": 3
+      }
+    ],
+    "journal": [],
+    "calls": [
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/register",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/withdraw",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/register",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      }
+    ]
+  },
+  "interrupted": {
+    "scores": [
+      {
+        "viewer_id": "300",
+        "score": 3
+      },
+      {
+        "viewer_id": "301",
+        "score": 0
+      },
+      {
+        "viewer_id": "302",
+        "score": 7
+      },
+      {
+        "viewer_id": "303",
+        "score": 6
+      }
+    ],
+    "scoreCount": 1104,
+    "scoreDigest": "bde1272b68dd1783835e8a27fa8e94489335842166a079f348eb2c67ca05be8f",
+    "activities": [
+      {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "status": "settling"
+      }
+    ],
+    "registrations": [
+      {
+        "viewer_id": "300",
+        "status": "withdrawn",
+        "ordinal": 1
+      },
+      {
+        "viewer_id": "301",
+        "status": "winner",
+        "ordinal": 2
+      },
+      {
+        "viewer_id": "302",
+        "status": "registered",
+        "ordinal": 3
+      }
+    ],
+    "journal": [
+      {
+        "activity_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "has_draw": 1,
+        "cursor": "z0995",
+        "completed_at": null
+      }
+    ],
+    "calls": [
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/register",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/withdraw",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/register",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/settlements/0de776f8-f803-48ea-b2d1-5eb8bba67942",
+        "status": 202
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      }
+    ]
+  },
+  "pending": {
+    "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "rule_version": 1,
+    "key": "0de776f8-f803-48ea-b2d1-5eb8bba67942"
+  },
+  "metrics": {
+    "innerWidth": 390,
+    "clientWidth": 390,
+    "scrollWidth": 390,
+    "pending": {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "rule_version": 1,
+      "key": "0de776f8-f803-48ea-b2d1-5eb8bba67942"
+    },
+    "openHidden": true
+  },
+  "current": {
+    "activity": {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "status": "settling",
+      "status_version": 1,
+      "rule_version": 1,
+      "guild_id": null,
+      "guild_invite_url": null,
+      "created_at": 1,
+      "expected_generation": 0,
+      "settlement_progress": {
+        "processed": true
+      }
+    },
+    "opening_generation": 0
+  },
+  "self": {
+    "ordinal": null,
+    "status": null,
+    "activity_status": "settling"
+  },
+  "finished": {
+    "scores": [
+      {
+        "viewer_id": "300",
+        "score": 3
+      },
+      {
+        "viewer_id": "301",
+        "score": 0
+      },
+      {
+        "viewer_id": "302",
+        "score": 7
+      },
+      {
+        "viewer_id": "303",
+        "score": 6
+      }
+    ],
+    "scoreCount": 1104,
+    "scoreDigest": "3132c46d68c3ba76a15a148124065602d3ae4adba8b4f6b223d61c4c0cbefebc",
+    "activities": [
+      {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "status": "settled"
+      }
+    ],
+    "registrations": [
+      {
+        "viewer_id": "300",
+        "status": "withdrawn",
+        "ordinal": 1
+      },
+      {
+        "viewer_id": "301",
+        "status": "winner",
+        "ordinal": 2
+      },
+      {
+        "viewer_id": "302",
+        "status": "registered",
+        "ordinal": 3
+      }
+    ],
+    "journal": [
+      {
+        "activity_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "has_draw": 1,
+        "cursor": "z1099",
+        "completed_at": 1794228649
+      }
+    ],
+    "calls": [
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/register",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/withdraw",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/register",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/settlements/0de776f8-f803-48ea-b2d1-5eb8bba67942",
+        "status": 202
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/settlements/0de776f8-f803-48ea-b2d1-5eb8bba67942",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      }
+    ]
+  },
+  "pendingOpen": {
+    "retryHidden": true,
+    "openHidden": true
+  },
+  "opened": {
+    "activity": {
+      "id": "50c132ae-230d-4fce-80c2-72a9446cf684",
+      "status": "open",
+      "status_version": 0,
+      "rule_version": 1,
+      "guild_id": null,
+      "guild_invite_url": null,
+      "created_at": 1794228650,
+      "expected_generation": 0
+    },
+    "opening_generation": 1
+  },
+  "disabled": {
+    "hidden": false,
+    "disabled": false
+  },
+  "noDraw": {
+    "scores": [
+      {
+        "viewer_id": "300",
+        "score": 3
+      },
+      {
+        "viewer_id": "301",
+        "score": 0
+      },
+      {
+        "viewer_id": "302",
+        "score": 7
+      },
+      {
+        "viewer_id": "303",
+        "score": 6
+      }
+    ],
+    "scoreCount": 1104,
+    "scoreDigest": "3132c46d68c3ba76a15a148124065602d3ae4adba8b4f6b223d61c4c0cbefebc",
+    "activities": [
+      {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "status": "settled"
+      },
+      {
+        "id": "50c132ae-230d-4fce-80c2-72a9446cf684",
+        "status": "settled"
+      }
+    ],
+    "registrations": [
+      {
+        "viewer_id": "300",
+        "status": "withdrawn",
+        "ordinal": 1
+      },
+      {
+        "viewer_id": "301",
+        "status": "winner",
+        "ordinal": 2
+      },
+      {
+        "viewer_id": "302",
+        "status": "registered",
+        "ordinal": 3
+      }
+    ],
+    "journal": [
+      {
+        "activity_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "has_draw": 1,
+        "cursor": "z1099",
+        "completed_at": 1794228649
+      },
+      {
+        "activity_id": "50c132ae-230d-4fce-80c2-72a9446cf684",
+        "has_draw": 0,
+        "cursor": "",
+        "completed_at": 1794228650
+      }
+    ],
+    "calls": [
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/register",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/withdraw",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/register",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/settlements/0de776f8-f803-48ea-b2d1-5eb8bba67942",
+        "status": 202
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/settlements/0de776f8-f803-48ea-b2d1-5eb8bba67942",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/50c132ae-230d-4fce-80c2-72a9446cf684/settlements/5e3df29b-947f-4a25-847c-d03373214a59",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/50c132ae-230d-4fce-80c2-72a9446cf684/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      }
+    ]
+  },
+  "fenced": {
+    "id": "b4fb98ac-ec7e-467c-94e9-520541fcb98d",
+    "status": "open",
+    "status_version": 0,
+    "rule_version": 1,
+    "guild_id": null,
+    "guild_invite_url": null,
+    "created_at": 1794228651,
+    "expected_generation": 1
+  },
+  "unknownDraw": {
+    "scores": [
+      {
+        "viewer_id": "300",
+        "score": 3
+      },
+      {
+        "viewer_id": "301",
+        "score": 0
+      },
+      {
+        "viewer_id": "302",
+        "score": 7
+      },
+      {
+        "viewer_id": "303",
+        "score": 6
+      }
+    ],
+    "scoreCount": 1104,
+    "scoreDigest": "3132c46d68c3ba76a15a148124065602d3ae4adba8b4f6b223d61c4c0cbefebc",
+    "activities": [
+      {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "status": "settled"
+      },
+      {
+        "id": "50c132ae-230d-4fce-80c2-72a9446cf684",
+        "status": "settled"
+      },
+      {
+        "id": "b4fb98ac-ec7e-467c-94e9-520541fcb98d",
+        "status": "settled"
+      }
+    ],
+    "registrations": [
+      {
+        "viewer_id": "300",
+        "status": "withdrawn",
+        "ordinal": 1
+      },
+      {
+        "viewer_id": "301",
+        "status": "winner",
+        "ordinal": 2
+      },
+      {
+        "viewer_id": "302",
+        "status": "registered",
+        "ordinal": 3
+      }
+    ],
+    "journal": [
+      {
+        "activity_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "has_draw": 1,
+        "cursor": "z1099",
+        "completed_at": 1794228649
+      },
+      {
+        "activity_id": "50c132ae-230d-4fce-80c2-72a9446cf684",
+        "has_draw": 0,
+        "cursor": "",
+        "completed_at": 1794228650
+      },
+      {
+        "activity_id": "b4fb98ac-ec7e-467c-94e9-520541fcb98d",
+        "has_draw": 0,
+        "cursor": "",
+        "completed_at": 1794228651
+      }
+    ],
+    "calls": [
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/register",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/withdraw",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "POST",
+        "url": "/api/viewer/123/register",
+        "body": "{\"activity_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"rule_version\":1}"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/settlements/0de776f8-f803-48ea-b2d1-5eb8bba67942",
+        "status": 202
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/viewer/123/self?activity_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&rule_version=1",
+        "body": ""
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/settlements/0de776f8-f803-48ea-b2d1-5eb8bba67942",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/50c132ae-230d-4fce-80c2-72a9446cf684/settlements/5e3df29b-947f-4a25-847c-d03373214a59",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/50c132ae-230d-4fce-80c2-72a9446cf684/status",
+        "body": ""
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/draws/7758a40e-f65d-457c-88af-7d9b186c2f87"
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/b4fb98ac-ec7e-467c-94e9-520541fcb98d/draws/unknown-draw"
+      },
+      {
+        "method": "PUT",
+        "url": "/api/activities/b4fb98ac-ec7e-467c-94e9-520541fcb98d/settlements/480d5472-7210-4a43-be34-08f72e78d2d3",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/b4fb98ac-ec7e-467c-94e9-520541fcb98d/status",
+        "body": ""
+      }
+    ]
+  }
+}

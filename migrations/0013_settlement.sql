@@ -1,0 +1,1 @@
+CREATE TABLE activity_settlements (activity_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, cursor TEXT NOT NULL DEFAULT '', has_draw INTEGER NOT NULL CHECK(has_draw IN (0,1)), completed_at INTEGER, FOREIGN KEY(activity_id,owner_id) REFERENCES activities(id,owner_id));

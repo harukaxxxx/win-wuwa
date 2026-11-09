@@ -1,0 +1,44 @@
+{
+  "synthetic": true,
+  "db": {
+    "scores": [],
+    "scoreCount": 0,
+    "scoreDigest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "activities": [
+      {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "status": "settled"
+      }
+    ],
+    "registrations": [],
+    "journal": [
+      {
+        "activity_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "has_draw": 0,
+        "cursor": "",
+        "completed_at": 1794228189
+      }
+    ],
+    "calls": [
+      {
+        "method": "PUT",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/settlements/5df56008-b66d-441b-89e8-ba50761dfe40",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/status",
+        "body": ""
+      }
+    ]
+  },
+  "ui": {
+    "innerWidth": 390,
+    "clientWidth": 390,
+    "scrollWidth": 390,
+    "state": "目前沒有未完成場次",
+    "notice": "原場 aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa 已讀回確認結算完成。",
+    "openHidden": true
+  },
+  "confirmation": "browser confirm replaced with true for this smoke"
+}

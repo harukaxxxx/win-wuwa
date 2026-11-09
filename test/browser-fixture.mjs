@@ -1,6 +1,7 @@
 // Test-only loopback proxy: never forwards requests to Discord or any other upstream.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { lanConfig, allowedLanRequest, toWorkerCookies, toLanCookie } from './lan-policy.mjs';
@@ -12,6 +13,8 @@ const managementQA = process.env.WUWA_MANAGEMENT_QA === '1' && !lan;
 const viewerQA = process.env.WUWA_VIEWER_QA === '1' && !lan;
 const statusQA = process.env.WUWA_STATUS_QA === '1' && viewerQA && managementQA && !lan;
 const drawQA = process.env.WUWA_DRAW_QA === '1' && statusQA;
+const settlementQA = process.env.WUWA_SETTLEMENT_QA === '1' && drawQA;
+let dropSettlement=false,failSettlementRead=false;
 let dropDraw=false,failDrawRead=false;
 let dropStatus=false,failStatusRead=false,dropWithdraw=false,failWithdrawRead=false,failOldSelf=false;
 const statusCalls=[];
@@ -46,7 +49,7 @@ const mf = new Miniflare(convertV4MiniflareOptions({
   }
 }));
 const db = await mf.getD1Database('DB');
-for (const file of ['migrations/0001_init.sql','migrations/0002_login_budget.sql','migrations/0003_streamer_status.sql','migrations/0004_activities.sql','migrations/0005_opening_generation.sql','migrations/0006_activity_defaults.sql',...(viewerQA?['migrations/0007_registrations.sql','migrations/0008_viewer_oauth.sql','migrations/0009_guild_proofs.sql']:[]),'migrations/0010_guild_invite.sql','migrations/0011_activity_status_version.sql',...(drawQA?['migrations/0012_draws.sql']:[])]) {
+for (const file of ['migrations/0001_init.sql','migrations/0002_login_budget.sql','migrations/0003_streamer_status.sql','migrations/0004_activities.sql','migrations/0005_opening_generation.sql','migrations/0006_activity_defaults.sql',...(viewerQA?['migrations/0007_registrations.sql','migrations/0008_viewer_oauth.sql','migrations/0009_guild_proofs.sql']:[]),'migrations/0010_guild_invite.sql','migrations/0011_activity_status_version.sql',...(drawQA?['migrations/0012_draws.sql']:[]),...(settlementQA?['migrations/0013_settlement.sql']:[])]) {
   for (const sql of (await readFile(file, 'utf8')).split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(sql).run();
 }
 await db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind('123').run();
@@ -58,6 +61,8 @@ const server = createServer(async (req, res) => {
     if (lan && (req.rawHeaders.filter((_, i) => i % 2 === 0 && req.rawHeaders[i].toLowerCase() === 'host').length !== 1 || !allowedLanRequest(lan, req.headers.host, req.socket.remoteAddress))) { res.writeHead(403); res.end('Forbidden'); return; }
     const url = new URL(req.url, origin);
     if (url.origin !== origin) { res.writeHead(403); res.end('Forbidden'); return; }
+    if(settlementQA && url.pathname==='/__fixture/settlement' && req.method==='POST'){const chunks=[];for await(const c of req)chunks.push(c);const mode=Buffer.concat(chunks).toString();if(mode==='fail-read'){failSettlementRead=true;}else if(mode==='force-settling'){const a=await db.prepare("SELECT id FROM activities WHERE owner_id='123' AND status='open'").first();if(!a)throw Error('no open fixture activity');await db.batch([db.prepare("UPDATE activities SET status='settling' WHERE id=?").bind(a.id),db.prepare("INSERT INTO activity_settlements(activity_id,owner_id,has_draw) VALUES (?,'123',0)").bind(a.id)]);}else if(mode==='seed'){await db.batch([db.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123','302',3)"),db.prepare("INSERT INTO viewer_scores(owner_id,viewer_id,score) VALUES ('123','300',3),('123','301',5),('123','302',6),('123','303',7)")]);}else if(mode==='large'){for(let start=0;start<1100;start+=100)await db.batch(Array.from({length:Math.min(100,1100-start)},(_,i)=>db.prepare('INSERT INTO viewer_scores(owner_id,viewer_id,score) VALUES (?, ?, 2)').bind('123','z'+String(start+i).padStart(4,'0'))));}else if(mode==='drop'){dropSettlement=true;failSettlementRead=true;}else {res.writeHead(400);res.end();return;}res.end('ok');return;}
+    if(settlementQA && url.pathname==='/__fixture/settlement' && req.method==='GET'){const scores=await db.prepare('SELECT viewer_id,score FROM viewer_scores WHERE owner_id=? AND viewer_id IN (?,?,?,?) ORDER BY viewer_id').bind('123','300','301','302','303').all();const allScores=await db.prepare('SELECT viewer_id,score FROM viewer_scores WHERE owner_id=? ORDER BY viewer_id').bind('123').all();const scoreDigest=createHash('sha256').update(JSON.stringify(allScores.results)).digest('hex');const activities=await db.prepare('SELECT id,status FROM activities ORDER BY created_at').all();const regs=await db.prepare('SELECT viewer_id,status,ordinal FROM registrations ORDER BY ordinal').all();const journal=await db.prepare('SELECT activity_id,has_draw,cursor,completed_at FROM activity_settlements').all();res.setHeader('content-type','application/json');res.end(JSON.stringify({scores:scores.results,scoreCount:allScores.results.length,scoreDigest,activities:activities.results,registrations:regs.results,journal:journal.results,calls:statusCalls}));return;}
     if(drawQA && url.pathname==='/__fixture/draw' && req.method==='POST'){const chunks=[];for await(const c of req)chunks.push(c);const mode=Buffer.concat(chunks).toString();if(mode==='drop'){dropDraw=true;failDrawRead=true;}else if(mode==='seed')await db.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123','301',2)").run();else {res.writeHead(400);res.end();return;}res.end('armed');return;}
     if(drawQA && url.pathname==='/__fixture/draw' && req.method==='GET'){const draws=await db.prepare('SELECT winner_ordinal,request_key FROM draws').all();const regs=await db.prepare('SELECT viewer_id,ordinal,status FROM registrations ORDER BY ordinal').all();res.setHeader('content-type','application/json');res.end(JSON.stringify({draws:draws.results,registrations:regs.results,calls:statusCalls}));return;}
     if(statusQA && url.pathname==='/__fixture/status' && req.method==='GET'){const activities=await db.prepare('SELECT id,status,status_version,rule_version FROM activities ORDER BY created_at').all();const registrations=await db.prepare('SELECT activity_id,viewer_id,status,ordinal FROM registrations ORDER BY activity_id,viewer_id').all();res.setHeader('content-type','application/json');res.end(JSON.stringify({calls:statusCalls,activities:activities.results,registrations:registrations.results}));return;}
@@ -80,6 +85,7 @@ const server = createServer(async (req, res) => {
       console.log('fixture authorize -> callback 302'); return;
     }
     const chunks=[]; for await (const chunk of req) chunks.push(chunk);
+    if(settlementQA && /\/settlements\//.test(url.pathname))statusCalls.push({method:req.method,url:url.pathname});
     if(drawQA && /^\/api\/activities\/[0-9a-f-]+\/draws\//.test(url.pathname))statusCalls.push({method:req.method,url:url.pathname});
     if(statusQA && (/^\/api\/activities\/[0-9a-f-]+\/status$/.test(url.pathname)||/^\/api\/viewer\/123\/(self|withdraw|register)$/.test(url.pathname)))statusCalls.push({method:req.method,url:url.pathname+url.search,body:Buffer.concat(chunks).toString()});
     const headers = new Headers(); for (const [name,value] of Object.entries(req.headers)) if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
@@ -88,6 +94,9 @@ const server = createServer(async (req, res) => {
     if(managementQA && blockActivity && req.method==='PUT' && /^\/api\/activities\/[0-9a-f-]+$/.test(url.pathname)){blockActivity=false;console.log(`fixture blocked activity before write ${url.pathname}`);res.writeHead(200,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
     if(viewerQA && req.method==='POST' && url.pathname==='/api/viewer/123/register' && blockRegistration){blockRegistration=false;console.log('fixture blocked registration before write');res.writeHead(200,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
     const response = await mf.dispatchFetch(url.href, { method: req.method, headers, body: ['GET','HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks), redirect: 'manual' });
+    if(settlementQA && req.method==='PUT' && /\/settlements\//.test(url.pathname))statusCalls[statusCalls.length-1].status=response.status;
+    if(settlementQA && req.method==='PUT' && /\/settlements\//.test(url.pathname) && dropSettlement){dropSettlement=false;await response.arrayBuffer();res.writeHead(response.status,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
+    if(settlementQA && req.method==='GET' && /\/status$/.test(url.pathname) && failSettlementRead){failSettlementRead=false;res.writeHead(503);res.end();return;}
     if(drawQA && req.method==='PUT' && /\/draws\//.test(url.pathname) && dropDraw){dropDraw=false;await response.arrayBuffer();res.writeHead(response.status,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
     if(drawQA && req.method==='GET' && /\/draws\//.test(url.pathname) && failDrawRead){failDrawRead=false;res.writeHead(503);res.end();return;}
     if(statusQA && req.method==='PUT' && /^\/api\/activities\/[0-9a-f-]+\/status$/.test(url.pathname) && dropStatus){dropStatus=false;await response.arrayBuffer();console.log(`fixture truncate status after worker response ${response.status}`);res.writeHead(response.status,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}

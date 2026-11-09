@@ -6,7 +6,7 @@
 - [領域詞彙](CONTEXT.md)
 - 已確認的取捨：[主播環境隔離](docs/adr/0001-streamer-isolation.md)、[取消的分數補償](docs/adr/0002-cancellation-compensation.md)。
 
-目前有 issue #8 **隔離合成資料**原型、#9 資格管理、#10 本機開場、#11 本機觀眾入口與報名、#12 合成群資格、#13 本機暫停／退出及 #14 本機快照抽選；結算、取消恢復及正式部署均未完成。登入不授予主播資格；本機測試資料中的核准不決定正式管理政策。見 [issue #8 證據](docs/issue-8-evidence.md)、[issue #10 證據](docs/issue-10-evidence.md)、[issue #11 證據](docs/issue-11-evidence.md)、[issue #12 證據與真供應商限制](docs/issue-12-evidence.md)、[issue #13 證據與缺口](docs/issue-13-evidence.md)、[issue #14 證據與限制](docs/issue-14-evidence.md)。
+目前有 issue #8 **隔離合成資料**原型、#9 資格管理、#10 本機開場、#11 本機觀眾入口與報名、#12 合成群資格、#13 本機暫停／退出、#14 本機快照抽選及 #15 本機正常結算／續跑 UI；#15 已以本機 D1 驗證 session 撤銷／過期提交邊界，以及以隔離合成瀏覽器重跑未知回應後的讀回和續跑。取消恢復及正式部署均未完成，正常結算尚未做真 provider／遠端 D1／實機驗收。登入不授予主播資格；本機測試資料中的核准不決定正式管理政策。見 [issue #8 證據](docs/issue-8-evidence.md)、[issue #10 證據](docs/issue-10-evidence.md)、[issue #11 證據](docs/issue-11-evidence.md)、[issue #12 證據與真供應商限制](docs/issue-12-evidence.md)、[issue #13 證據與缺口](docs/issue-13-evidence.md)、[issue #14 證據與限制](docs/issue-14-evidence.md)、[issue #15 隔離驗收與限制](docs/issue-15-evidence.md)。
 
 ## Issue #12 合成群資格（真供應商未驗收）
 

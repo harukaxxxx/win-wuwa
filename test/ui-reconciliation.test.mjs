@@ -13,6 +13,7 @@ async function page(script, {storage={}, fetch:handler}) {
     append(el){el.parentElement=this;this.children.push(el);buttons.push(el);}
     querySelectorAll(){return [];}
     removeAttribute(){}
+    setAttribute(){}
     async click(){assert.ok(!this.hidden&&!this.disabled,`button inaccessible: ${this.id||this.textContent}`);return this.handlers.click?.({preventDefault(){}});}
   }
   const document={getElementById(id){if(!elements.has(id))elements.set(id,new Element(id));return elements.get(id);},createElement(){return new Element();}};
@@ -194,4 +195,72 @@ test('a later draw needs an explicit click and a new request key',async()=>{
   assert.equal(p.calls.filter(c=>c.method==='PUT').length,1);
   await p.button('抽選').click();assert.match(p.get('draw-result').textContent,/序號 2/);
   const puts=p.calls.filter(c=>c.method==='PUT');assert.equal(puts.length,2);assert.notEqual(puts[0].url,puts[1].url);
+});
+
+test('pending opening cannot be retried while settlement outcome is unknown',async()=>{
+ const op={...old,key:'old-key'};const opening={id:current.id,guild_id:null,expected_generation:1};
+ const p=await page('app.js',{storage:{'wuwa-settlement-123':JSON.stringify(op),'wuwa-open-123':JSON.stringify(opening)},fetch:async url=>{
+  if(url==='/api/session')return response({user_id:'123',csrf:'x',approved:true});
+  if(url==='/api/activity-default')return response({version:0,guild_id:null,guild_invite_url:null});
+  if(url==='/api/activities/current')return response({activity:null,opening_generation:1});
+  if(url==='/api/environment')return response({version:1,value:''});
+  if(url===`/api/activities/${old.id}/status`)return response({},503);
+  throw Error(url);
+ }});await flush();assert.equal(p.get('retry-activity').hidden,true);
+ assert.equal(p.get('open-activity').hidden,true);assert.equal(p.calls.filter(c=>c.method==='PUT').length,0);
+});
+
+test('settling can resume when an older draw remains unknown',async()=>{
+ const draw={...old,key:'old-draw'};let puts=0,state='settling';
+ const p=await page('app.js',{storage:{'wuwa-draw-123':JSON.stringify(draw)},fetch:async(url,options={})=>{
+  if(url==='/api/session')return response({user_id:'123',csrf:'x',approved:true});
+  if(url==='/api/activity-default')return response({version:0,guild_id:null,guild_invite_url:null});
+  if(url==='/api/activities/current')return response({activity:state==='settled'?null:{...old,status:state,status_version:1},opening_generation:1});
+  if(url==='/api/environment')return response({version:1,value:''});
+  if(url.includes('/draws/'))return response({},404);
+  if(url.includes('/settlements/')&&options.method==='PUT'){puts++;state='settled';return response({status:state});}
+  if(url===`/api/activities/${old.id}/status`)return response({...old,status:state,status_version:2});
+  throw Error(url);
+ }});await flush();await p.button('繼續結算').click();assert.equal(puts,1);
+ assert.equal(p.data.get('wuwa-draw-123'),JSON.stringify(draw));
+ assert.equal(p.data.has('wuwa-settlement-123'),false);
+});
+
+test('old settlement pending is reconciled without submitting to a newer activity',async()=>{
+ const op={...old,key:'old-key'};let reads=0;
+ const p=await page('app.js',{storage:{'wuwa-settlement-123':JSON.stringify(op)},fetch:async url=>{
+  if(url==='/api/session')return response({user_id:'123',csrf:'x',approved:true});
+  if(url==='/api/activity-default')return response({version:0,guild_id:null,guild_invite_url:null});
+  if(url==='/api/activities/current')return response({activity:current,opening_generation:2});
+  if(url==='/api/environment')return response({version:1,value:''});
+  if(url.endsWith('/draw-results/latest'))return response({},404);
+  if(url===`/api/activities/${old.id}/status`)return ++reads===1?response({},503):response({...old,status:'settled',status_version:2});
+  throw Error(url);
+ }});await flush();
+ assert.equal(p.data.get('wuwa-settlement-123'),JSON.stringify(op));
+ assert.equal(p.button('正常結束並結算').hidden,true);
+ await p.button('重新確認結算').click();
+ assert.equal(p.data.has('wuwa-settlement-123'),false);
+ assert.equal(p.button('正常結束並結算').hidden,false);
+ assert.equal(p.calls.filter(c=>c.method==='PUT').length,0);
+ assert.equal(p.calls.filter(c=>c.url===`/api/activities/${old.id}/status`).length,2);
+});
+
+test('settlement 202 keeps exact operation and requires manual continuation',async()=>{
+ let state='open',puts=0;
+ const p=await page('app.js',{fetch:async(url,options={})=>{
+  if(url==='/api/session')return response({user_id:'123',csrf:'x',approved:true});
+  if(url==='/api/activity-default')return response({version:0,guild_id:null,guild_invite_url:null});
+  if(url==='/api/activities/current')return response({activity:state==='settled'?null:{...old,status:state,status_version:0},opening_generation:1});
+  if(url==='/api/environment')return response({version:1,value:''});
+  if(url.endsWith('/draw-results/latest'))return response({},404);
+  if(url.includes('/settlements/') && options.method==='PUT'){puts++;state=puts===1?'settling':'settled';return response({status:state},puts===1?202:200);}
+  if(url===`/api/activities/${old.id}/status`)return response({...old,status:state,status_version:1});
+  throw Error(url);
+ }});await flush();await p.button('正常結束並結算').click();
+ assert.equal(puts,1);assert.equal(p.data.has('wuwa-settlement-123'),true);
+ assert.equal(p.get('open-activity').hidden,true);
+ await p.button('繼續結算').click();assert.equal(puts,2);
+ assert.equal(p.data.has('wuwa-settlement-123'),false);
+ assert.equal(p.get('open-activity').hidden,false);
 });

@@ -1,0 +1,11 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {readFile,readdir} from 'node:fs/promises';import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
+test('0013 preserves 0012 scores, registrations, proof, defaults, baselines and draw snapshots',async()=>{
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:true,scriptPath:'dist/index.js',compatibilityDate:'2026-07-30',d1Databases:['DB']}));try{
+  const db=await mf.getD1Database('DB');const migrate=async f=>{for(const q of (await readFile(`migrations/${f}`,'utf8')).split(';').map(x=>x.trim()).filter(Boolean))await db.prepare(q).run();};
+  for(const f of (await readdir('migrations')).sort().filter(x=>x<'0013'))await migrate(f);
+  await db.prepare("INSERT INTO approved_streamers(user_id) VALUES ('1'),('2')").run();await db.prepare("INSERT INTO activities(id,owner_id,status,rule_version,created_at) VALUES ('a','1','open',1,1)").run();
+  await db.prepare("INSERT INTO viewer_scores VALUES ('1','3',10),('2','3',9)").run();await db.prepare("INSERT INTO activity_score_baselines VALUES ('a','1','3',8)").run();await db.prepare("INSERT INTO registrations VALUES ('a','1','3',1,'winner')").run();await db.prepare("INSERT INTO activity_defaults VALUES ('1','123',1,'https://discord.gg/abc')").run();await db.prepare("INSERT INTO guild_membership_proofs VALUES ('h','3','1','a',1,'123','member',NULL,9999999999)").run();await db.prepare("INSERT INTO draws VALUES ('d','a','1','k',1,'3',1,3)").run();await db.prepare("INSERT INTO draw_candidates VALUES ('d','3',1,8,1,1)").run();
+  const tables=['activities','approved_streamers','viewer_scores','activity_score_baselines','registrations','activity_defaults','guild_membership_proofs','draws','draw_candidates'];const snapshot=async()=>Object.fromEntries(await Promise.all(tables.map(async t=>[t,(await db.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all()).results])));const before=await snapshot();await migrate('0013_settlement.sql');assert.deepEqual(await snapshot(),before);
+  await assert.rejects(db.prepare("UPDATE viewer_scores SET score=11 WHERE owner_id='1'").run());await assert.rejects(db.prepare("UPDATE viewer_scores SET score=-1 WHERE owner_id='1'").run());
+ }finally{await mf.dispose();}
+});
