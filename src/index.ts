@@ -39,7 +39,7 @@ async function handler(req: Request, env: Env): Promise<Response> {
   const s = await session(req,env); if (!s) return json({error:'unauthenticated'},401);
   if (req.method !== 'GET') { const c = req.headers.get('X-CSRF-Token') ?? ''; if (!origin || u.origin !== origin || req.headers.get('Origin') !== origin || !/^[a-f0-9]{64}$/.test(c) || await hash(c) !== s.csrf_hash) return json({error:'csrf'},403); }
   const admin=!!env.ADMIN_DISCORD_ID && /^\d{1,32}$/.test(env.ADMIN_DISCORD_ID) && s.user_id===env.ADMIN_DISCORD_ID;
-  if (u.pathname === '/api/session' && req.method === 'GET') { const c=cookie(req,'__Host-csrf'); if (!/^[a-f0-9]{64}$/.test(c) || await hash(c)!==s.csrf_hash) return json({error:'session invalid'},401); const approved=await env.DB.prepare("SELECT user_id FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); return json({csrf:c,approved:!!approved,admin}); }
+  if (u.pathname === '/api/session' && req.method === 'GET') { const c=cookie(req,'__Host-csrf'); if (!/^[a-f0-9]{64}$/.test(c) || await hash(c)!==s.csrf_hash) return json({error:'session invalid'},401); const approved=await env.DB.prepare("SELECT user_id FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); return json({csrf:c,approved:!!approved,admin,user_id:s.user_id}); }
   if (u.pathname === '/api/logout' && req.method === 'POST') { await env.DB.prepare('DELETE FROM sessions WHERE session_hash=?').bind(await hash(cookie(req,'__Host-session'))).run(); const h=new Headers(headers); h.append('Set-Cookie',setCookie('__Host-session','',0)); h.append('Set-Cookie',setCookie('__Host-csrf','',0)); return new Response(null,{status:204,headers:h}); }
   if (u.pathname.startsWith('/api/admin/')) {
    if (!admin) return json({error:'forbidden'},403);
@@ -59,6 +59,50 @@ async function handler(req: Request, env: Env): Promise<Response> {
    }
    if (u.pathname==='/api/admin/streamers' && req.method==='GET') { const params=[...u.searchParams]; if(params.some(([k])=>k!=='cursor') || params.length>1 || (params.length===1 && !/^\d{1,32}$/.test(params[0][1]))) return json({error:'invalid query'},400); const cursor=params[0]?.[1] ?? ''; const rows=await env.DB.prepare('SELECT user_id,status,version FROM approved_streamers WHERE user_id>? ORDER BY user_id LIMIT 101').bind(cursor).all<{user_id:string;status:string;version:number}>(); const more=rows.results.length>100; const page=rows.results.slice(0,100); return json({streamers:page,has_more:more,next_cursor:more ? page[page.length-1].user_id : null}); }
    return json({error:'not found'},404);
+  }
+  if (u.pathname === '/api/activity-default') {
+   if(u.search) return json({error:'invalid query'},400);
+   if(req.method==='GET') { const row=await env.DB.prepare('SELECT guild_id,version FROM activity_defaults WHERE owner_id=?').bind(s.user_id).first(); return json(row ?? {guild_id:null,version:0}); }
+   if(req.method==='PUT') {
+    let value:unknown; try { value=await req.json(); } catch { return json({error:'invalid'},400); }
+    if(!value || typeof value!=='object' || Array.isArray(value)) return json({error:'invalid'},400);
+    const b=value as Record<string,unknown>;
+    if(Object.keys(b).sort().join(',')!=='guild_id,version' || !(b.guild_id===null || (typeof b.guild_id==='string' && /^\d{1,32}$/.test(b.guild_id))) || !Number.isSafeInteger(b.version) || (b.version as number)<0 || (b.version as number)>=Number.MAX_SAFE_INTEGER) return json({error:'invalid'},400);
+    const stmt=b.version===0 ? env.DB.prepare("INSERT INTO activity_defaults(owner_id,guild_id,version) SELECT ?,?,1 WHERE EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') ON CONFLICT(owner_id) DO NOTHING RETURNING guild_id,version").bind(s.user_id,b.guild_id,s.user_id) : env.DB.prepare("UPDATE activity_defaults SET guild_id=?,version=version+1 WHERE owner_id=? AND version=? AND EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') RETURNING guild_id,version").bind(b.guild_id,s.user_id,b.version,s.user_id);
+    const row=await stmt.first(); if(row) return json(row);
+    const approved=await env.DB.prepare("SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); return approved ? json({error:'conflict'},409) : json({error:'not approved'},403);
+   }
+  }
+  if (u.pathname === '/api/activities/current' && req.method==='GET') {
+   if(u.search) return json({error:'invalid query'},400);
+   const state=await env.DB.prepare("SELECT COALESCE((SELECT generation FROM activity_opening_generations WHERE owner_id=?),0) AS opening_generation, (SELECT json_object('id',id,'status',status,'rule_version',rule_version,'guild_id',guild_id,'created_at',created_at,'expected_generation',expected_generation) FROM activities WHERE owner_id=? AND status IN ('initializing','open','paused','settling','cancelling')) AS activity").bind(s.user_id,s.user_id).first<{opening_generation:number;activity:string|null}>();
+   return json({activity:state?.activity ? JSON.parse(state.activity) : null,opening_generation:state?.opening_generation ?? 0});
+  }
+  const activityMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/);
+  if(activityMatch && req.method==='PUT') {
+   if(u.search) return json({error:'invalid query'},400);
+   let value:unknown; try { value=await req.json(); } catch { return json({error:'invalid'},400); }
+   if(!value || typeof value!=='object' || Array.isArray(value)) return json({error:'invalid'},400);
+   const b=value as Record<string,unknown>;
+   if(Object.keys(b).sort().join(',')!=='expected_generation,guild_id,rule_version' || b.rule_version!==1 || !Number.isSafeInteger(b.expected_generation) || (b.expected_generation as number)<0 || (b.expected_generation as number)>=Number.MAX_SAFE_INTEGER || !(b.guild_id===null || (typeof b.guild_id==='string' && /^\d{1,32}$/.test(b.guild_id)))) return json({error:'invalid'},400);
+   const id=activityMatch[1], guild=b.guild_id as string|null, expected=b.expected_generation as number;
+   const lookup=()=>env.DB.prepare('SELECT id,status,rule_version,guild_id,created_at,expected_generation FROM activities WHERE id=? AND owner_id=?').bind(id,s.user_id).first<{id:string;status:string;rule_version:number;guild_id:string|null;created_at:number;expected_generation:number}>();
+   const existing=await lookup();
+   if(existing) return existing.rule_version===1 && existing.guild_id===guild && existing.expected_generation===expected ? json({activity:existing}) : json({error:'conflict'},409);
+   try {
+    const results=await env.DB.batch([
+     env.DB.prepare("INSERT INTO activities(id,owner_id,status,rule_version,guild_id,created_at,expected_generation) SELECT ?,?,'initializing',1,?,?,? WHERE EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') AND COALESCE((SELECT generation FROM activity_opening_generations WHERE owner_id=?),0)=?").bind(id,s.user_id,guild,now(),expected,s.user_id,s.user_id,expected),
+     env.DB.prepare("INSERT INTO activity_opening_generations(owner_id,generation) SELECT ?,?+1 WHERE EXISTS (SELECT 1 FROM activities WHERE id=? AND owner_id=? AND status='initializing' AND expected_generation=?) ON CONFLICT(owner_id) DO UPDATE SET generation=excluded.generation WHERE activity_opening_generations.generation=?").bind(s.user_id,expected,id,s.user_id,expected,expected),
+     env.DB.prepare("INSERT INTO activity_score_baselines(activity_id,owner_id,viewer_id,score) SELECT ?,owner_id,viewer_id,score FROM viewer_scores WHERE owner_id=? AND score>0 AND EXISTS (SELECT 1 FROM activities WHERE id=? AND owner_id=? AND status='initializing')").bind(id,s.user_id,id,s.user_id),
+     env.DB.prepare("UPDATE activities SET status='open' WHERE id=? AND owner_id=? AND status='initializing' AND EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved')").bind(id,s.user_id,s.user_id)
+    ]);
+    if(!results[0].meta.changes) { const retry=await lookup(); if(retry) return retry.guild_id===guild && retry.expected_generation===expected ? json({activity:retry}) : json({error:'conflict'},409); const approved=await env.DB.prepare("SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); return approved ? json({error:'conflict'},409) : json({error:'not approved'},403); }
+   } catch {
+    const retry=await lookup(); if(retry) return retry.rule_version===1 && retry.guild_id===guild && retry.expected_generation===expected ? json({activity:retry}) : json({error:'conflict'},409);
+    const conflict=await env.DB.prepare("SELECT 1 FROM activities WHERE id=? OR (owner_id=? AND status IN ('initializing','open','paused','settling','cancelling')) LIMIT 1").bind(id,s.user_id).first();
+    return conflict ? json({error:'conflict'},409) : json({error:'request failed'},500);
+   }
+   const created=await lookup(); return created ? json({activity:created},201) : json({error:'not approved'},403);
   }
   if (u.pathname === '/api/environment') {
    const approved=await env.DB.prepare("SELECT user_id FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); if (!approved) return json({error:'not approved'},403);

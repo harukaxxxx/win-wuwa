@@ -1,0 +1,1 @@
+CREATE TABLE activity_defaults (owner_id TEXT PRIMARY KEY REFERENCES approved_streamers(user_id), guild_id TEXT CHECK(guild_id IS NULL OR (length(guild_id) BETWEEN 1 AND 32 AND guild_id NOT GLOB '*[^0-9]*')), version INTEGER NOT NULL CHECK(version >= 1));
