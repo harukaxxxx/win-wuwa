@@ -14,6 +14,8 @@ const viewerQA = process.env.WUWA_VIEWER_QA === '1' && !lan;
 const statusQA = process.env.WUWA_STATUS_QA === '1' && viewerQA && managementQA && !lan;
 const drawQA = process.env.WUWA_DRAW_QA === '1' && statusQA;
 const settlementQA = process.env.WUWA_SETTLEMENT_QA === '1' && drawQA;
+const cancellationQA = process.env.WUWA_CANCELLATION_QA === '1' && settlementQA;
+let dropCancellation=false,failCancellationRead=false;
 const denyClipboardQA = process.env.WUWA_DENY_CLIPBOARD_QA === '1' && settlementQA && !lan;
 let dropSettlement=false,failSettlementRead=false;
 let dropDraw=false,failDrawRead=false;
@@ -65,6 +67,28 @@ const server = createServer(async (req, res) => {
     if (lan && (req.rawHeaders.filter((_, i) => i % 2 === 0 && req.rawHeaders[i].toLowerCase() === 'host').length !== 1 || !allowedLanRequest(lan, req.headers.host, req.socket.remoteAddress))) { res.writeHead(403); res.end('Forbidden'); return; }
     const url = new URL(req.url, origin);
     if (url.origin !== origin) { res.writeHead(403); res.end('Forbidden'); return; }
+    if(cancellationQA && url.pathname==='/__fixture/cancellation' && req.method==='POST'){
+      const chunks=[];for await(const c of req)chunks.push(c);const mode=Buffer.concat(chunks).toString();
+      if(mode==='seed'){
+        const ids=Array.from({length:1001},(_,i)=>String(10000+i));
+        await db.batch([
+          db.prepare("INSERT INTO viewer_scores(owner_id,viewer_id,score) VALUES ('123','300',7),('123','301',4)"),
+          db.prepare("INSERT INTO activity_score_baselines(activity_id,owner_id,viewer_id,score) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123','300',7),('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123','301',4)"),
+          db.prepare("INSERT INTO viewer_scores(owner_id,viewer_id,score) SELECT '123',value,0 FROM json_each(?)").bind(JSON.stringify(ids)),
+          db.prepare("INSERT INTO activity_score_baselines(activity_id,owner_id,viewer_id,score) SELECT 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123',value,5 FROM json_each(?)").bind(JSON.stringify(ids)),
+          db.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal,status) SELECT 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123',value,CAST(key AS INTEGER)+2,'winner' FROM json_each(?)").bind(JSON.stringify(ids)),
+          db.prepare("INSERT INTO draws(id,activity_id,owner_id,request_key,rule_version,winner_id,winner_ordinal,created_at) SELECT 'fixture-'||key,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123','fixture-'||key,1,value,CAST(key AS INTEGER)+2,1 FROM json_each(?)").bind(JSON.stringify(ids))
+        ]);
+      }else if(mode==='drop'){dropCancellation=true;failCancellationRead=true;}else {res.writeHead(400);res.end();return;}
+      res.end('ok');return;
+    }
+    if(cancellationQA && url.pathname==='/__fixture/cancellation' && req.method==='GET'){
+      const scores=(await db.prepare("SELECT viewer_id,score FROM viewer_scores WHERE owner_id='123' ORDER BY viewer_id").all()).results;
+      const activities=(await db.prepare("SELECT id,status FROM activities WHERE owner_id='123' ORDER BY rowid").all()).results;
+      const journal=(await db.prepare('SELECT activity_id,cursor,completed_at FROM activity_cancellations').all()).results;
+      const regs=(await db.prepare("SELECT activity_id,viewer_id,ordinal,status FROM registrations WHERE viewer_id IN ('300','301')").all()).results;
+      res.setHeader('content-type','application/json');res.end(JSON.stringify({scores,activities,journal,regs,calls:statusCalls}));return;
+    }
     if (denyClipboardQA && url.pathname==='/__fixture/deny-clipboard.js' && req.method==='GET') { res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'});res.end("Object.defineProperty(navigator, 'clipboard', {value:{writeText:()=>Promise.reject(new DOMException('Synthetic denied', 'NotAllowedError'))},configurable:true});");return; }
     if(settlementQA && url.pathname==='/__fixture/settlement' && req.method==='POST'){const chunks=[];for await(const c of req)chunks.push(c);const mode=Buffer.concat(chunks).toString();if(mode==='fail-read'){failSettlementRead=true;}else if(mode==='force-settling'){const a=await db.prepare("SELECT id FROM activities WHERE owner_id='123' AND status='open'").first();if(!a)throw Error('no open fixture activity');await db.batch([db.prepare("UPDATE activities SET status='settling' WHERE id=?").bind(a.id),db.prepare("INSERT INTO activity_settlements(activity_id,owner_id,has_draw) VALUES (?,'123',0)").bind(a.id)]);}else if(mode==='seed'){await db.batch([db.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123','302',3)"),db.prepare("INSERT INTO viewer_scores(owner_id,viewer_id,score) VALUES ('123','300',3),('123','301',5),('123','302',6),('123','303',7)")]);}else if(mode==='large'){for(let start=0;start<1100;start+=100)await db.batch(Array.from({length:Math.min(100,1100-start)},(_,i)=>db.prepare('INSERT INTO viewer_scores(owner_id,viewer_id,score) VALUES (?, ?, 2)').bind('123','z'+String(start+i).padStart(4,'0'))));}else if(mode==='drop'){dropSettlement=true;failSettlementRead=true;}else {res.writeHead(400);res.end();return;}res.end('ok');return;}
     if(settlementQA && url.pathname==='/__fixture/settlement' && req.method==='GET'){const scores=await db.prepare('SELECT viewer_id,score FROM viewer_scores WHERE owner_id=? AND viewer_id IN (?,?,?,?) ORDER BY viewer_id').bind('123','300','301','302','303').all();const allScores=await db.prepare('SELECT viewer_id,score FROM viewer_scores WHERE owner_id=? ORDER BY viewer_id').bind('123').all();const scoreDigest=createHash('sha256').update(JSON.stringify(allScores.results)).digest('hex');const activities=await db.prepare('SELECT id,status FROM activities ORDER BY created_at').all();const regs=await db.prepare('SELECT viewer_id,status,ordinal FROM registrations ORDER BY ordinal').all();const journal=await db.prepare('SELECT activity_id,has_draw,cursor,completed_at FROM activity_settlements').all();res.setHeader('content-type','application/json');res.end(JSON.stringify({scores:scores.results,scoreCount:allScores.results.length,scoreDigest,activities:activities.results,registrations:regs.results,journal:journal.results,calls:statusCalls}));return;}
@@ -90,7 +114,7 @@ const server = createServer(async (req, res) => {
       console.log('fixture authorize -> callback 302'); return;
     }
     const chunks=[]; for await (const chunk of req) chunks.push(chunk);
-    if(settlementQA && /\/settlements\//.test(url.pathname))statusCalls.push({method:req.method,url:url.pathname});
+    if(settlementQA && /\/(settlements|cancellations)\//.test(url.pathname))statusCalls.push({method:req.method,url:url.pathname});
     if(drawQA && /^\/api\/activities\/[0-9a-f-]+\/draws\//.test(url.pathname))statusCalls.push({method:req.method,url:url.pathname});
     if(statusQA && (/^\/api\/activities\/[0-9a-f-]+\/status$/.test(url.pathname)||/^\/api\/viewer\/123\/(self|withdraw|register)$/.test(url.pathname)))statusCalls.push({method:req.method,url:url.pathname+url.search,body:Buffer.concat(chunks).toString()});
     const headers = new Headers(); for (const [name,value] of Object.entries(req.headers)) if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
@@ -99,6 +123,8 @@ const server = createServer(async (req, res) => {
     if(managementQA && blockActivity && req.method==='PUT' && /^\/api\/activities\/[0-9a-f-]+$/.test(url.pathname)){blockActivity=false;console.log(`fixture blocked activity before write ${url.pathname}`);res.writeHead(200,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
     if(viewerQA && req.method==='POST' && url.pathname==='/api/viewer/123/register' && blockRegistration){blockRegistration=false;console.log('fixture blocked registration before write');res.writeHead(200,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
     const response = await mf.dispatchFetch(url.href, { method: req.method, headers, body: ['GET','HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks), redirect: 'manual' });
+    if(cancellationQA && req.method==='PUT' && /\/cancellations\//.test(url.pathname)){statusCalls[statusCalls.length-1].status=response.status;if(dropCancellation){dropCancellation=false;await response.arrayBuffer();res.writeHead(response.status,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}}
+    if(cancellationQA && req.method==='GET' && /\/status$/.test(url.pathname) && failCancellationRead){failCancellationRead=false;res.writeHead(503);res.end();return;}
     if(settlementQA && req.method==='PUT' && /\/settlements\//.test(url.pathname))statusCalls[statusCalls.length-1].status=response.status;
     if(settlementQA && req.method==='PUT' && /\/settlements\//.test(url.pathname) && dropSettlement){dropSettlement=false;await response.arrayBuffer();res.writeHead(response.status,{'content-type':'application/json','content-length':'100'});res.write('{');res.flushHeaders();setTimeout(()=>res.destroy(),25);return;}
     if(settlementQA && req.method==='GET' && /\/status$/.test(url.pathname) && failSettlementRead){failSettlementRead=false;res.writeHead(503);res.end();return;}

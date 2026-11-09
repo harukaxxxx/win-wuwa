@@ -1,5 +1,6 @@
 import {draw} from './draw';
 import {settle} from './settlement';
+import {cancel} from './cancellation';
 import {publicResults,chance,roster,ownedActivities} from './results';
 interface Env { DB: D1Database; ASSETS: Fetcher; DISCORD_CLIENT_ID?: string; DISCORD_CLIENT_SECRET?: string; ADMIN_DISCORD_ID?: string; ORIGIN?: string }
 const headers = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
@@ -191,11 +192,13 @@ async function handler(req: Request, env: Env): Promise<Response> {
    return json({activity,opening_generation:state?.opening_generation ?? 0});
   }
   const latestDraw=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/draw-results\/latest$/);
-  if(latestDraw && req.method==='GET') {if(u.search)return json({error:'invalid query'},400);const row=await env.DB.prepare('SELECT winner_ordinal,rule_version,created_at FROM draws WHERE activity_id=? AND owner_id=? ORDER BY rowid DESC LIMIT 1').bind(latestDraw[1],s.user_id).first();return row?json({draw:row}):json({error:'not found'},404);}
+  if(latestDraw && req.method==='GET') {if(u.search)return json({error:'invalid query'},400);const row=await env.DB.prepare('SELECT winner_ordinal,rule_version,created_at FROM draws WHERE activity_id=? AND owner_id=? ORDER BY rowid DESC LIMIT 1').bind(latestDraw[1],s.user_id).first();if(!row)return json({error:'not found'},404);const state=await env.DB.prepare('SELECT status FROM activities WHERE id=? AND owner_id=?').bind(latestDraw[1],s.user_id).first<{status:string}>();return json({draw:row,...(state&&['cancelling','cancelled'].includes(state.status)?{invalid:true}:{})});}
   const drawMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/draws\/([A-Za-z0-9_-]{1,128})$/);
   if(drawMatch) return draw(req,env.DB,s.user_id,await hash(cookie(req,'__Host-session')),drawMatch[1],drawMatch[2]);
   const settlementMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/settlements\/([A-Za-z0-9_-]{1,128})$/);
   if(settlementMatch) return settle(req,env.DB,s.user_id,await hash(cookie(req,'__Host-session')),settlementMatch[1]);
+  const cancellationMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/cancellations\/([A-Za-z0-9_-]{1,128})$/);
+  if(cancellationMatch) return cancel(req,env.DB,s.user_id,await hash(cookie(req,'__Host-session')),cancellationMatch[1]);
   const statusMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/status$/);
   if(statusMatch && req.method==='GET') {if(u.search)return json({error:'invalid query'},400);const row=await env.DB.prepare('SELECT id,status,status_version,rule_version FROM activities WHERE id=? AND owner_id=?').bind(statusMatch[1],s.user_id).first();return row?json(row):json({error:'not found'},404);}
   if(statusMatch && req.method==='PUT') {

@@ -1,0 +1,13 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {readFile,readdir} from 'node:fs/promises';import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
+test('0017 preserves scores, baselines, names, proofs, settings, draws and other owners',async()=>{
+ const mf=new Miniflare(convertV4MiniflareOptions({modules:true,scriptPath:'dist/index.js',compatibilityDate:'2026-07-30',d1Databases:['DB']}));
+ try{const db=await mf.getD1Database('DB');const migrate=async f=>{for(const q of (await readFile('migrations/'+f,'utf8')).split(/;\s*(?=(?:CREATE|ALTER|INSERT|UPDATE|DROP|$))/i).map(x=>x.trim()).filter(Boolean))await db.prepare(q).run();};for(const f of (await readdir('migrations')).sort().filter(x=>x<'0017'))await migrate(f);
+ await db.prepare("INSERT INTO approved_streamers(user_id) VALUES ('1'),('2')").run();await db.prepare("INSERT INTO activities(id,owner_id,status,rule_version,created_at) VALUES ('a','1','open',1,1),('b','2','open',1,1)").run();
+ await db.prepare("INSERT INTO viewer_scores VALUES ('1','3',0),('2','3',9)").run();await db.prepare("INSERT INTO activity_score_baselines VALUES ('a','1','3',7),('b','2','3',9)").run();
+ await db.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal,status,display_name_snapshot,name_source) VALUES ('a','1','3',1,'winner','Name','global_name')").run();
+ await db.prepare("INSERT INTO guild_membership_proofs(session_hash,user_id,owner_id,activity_id,rule_version,guild_id,status,expires,nickname) VALUES ('h','3','1','a',1,'123','member',9999999999,'Nick')").run();
+ await db.prepare("INSERT INTO draws(id,activity_id,owner_id,request_key,rule_version,winner_id,winner_ordinal,created_at,winner_display_name) VALUES ('d','a','1','k',1,'3',1,3,'Name')").run();await db.prepare("INSERT INTO draw_candidates VALUES ('d','3',1,7,1,1)").run();
+ await db.prepare("INSERT INTO discord_identities(user_id,display_name,username) VALUES ('3','Profile','private')").run();await db.prepare("INSERT INTO activity_defaults(owner_id,guild_id,version) VALUES ('1','123',1)").run();
+ const tables=['approved_streamers','activities','viewer_scores','activity_score_baselines','registrations','guild_membership_proofs','draws','draw_candidates','discord_identities','activity_defaults'];const snapshot=async()=>Object.fromEntries(await Promise.all(tables.map(async t=>[t,(await db.prepare(`SELECT * FROM ${t}`).all()).results])));const before=await snapshot();await migrate('0017_cancellation.sql');assert.deepEqual(await snapshot(),before);assert.equal((await db.prepare('SELECT count(*) n FROM activity_cancellations').first()).n,0);
+ }finally{await mf.dispose();}
+});

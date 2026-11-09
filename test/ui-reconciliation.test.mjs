@@ -264,3 +264,63 @@ test('settlement 202 keeps exact operation and requires manual continuation',asy
  assert.equal(p.data.has('wuwa-settlement-123'),false);
  assert.equal(p.get('open-activity').hidden,false);
 });
+
+test('cancellation preserves the original key across 202 until exact cancelled readback',async()=>{
+ let state='open',puts=[];
+ const p=await page('app.js',{fetch:async(url,options={})=>{
+  if(url==='/api/session')return response({user_id:'123',csrf:'x',approved:false});
+  if(url==='/api/activity-default')return response({version:0,guild_id:null,guild_invite_url:null});
+  if(url==='/api/activities/current')return response({activity:state==='cancelled'?null:{...old,status:state,status_version:0},opening_generation:1});
+  if(url.endsWith('/draw-results/latest'))return response({},404);
+  if(url.includes('/cancellations/')&&options.method==='PUT'){puts.push(url);state=puts.length===1?'cancelling':'cancelled';return response({status:state},puts.length===1?202:200);}
+  if(url===`/api/activities/${old.id}/status`)return response({...old,status:state,status_version:1});
+  throw Error(url);
+ }});await flush();await p.button('取消場次並恢復分數').click();
+ assert.equal(puts.length,1);assert.ok(p.data.has('wuwa-cancellation-123'));assert.equal(p.get('open-activity').hidden,true);
+ await p.button('繼續取消恢復').click();assert.equal(puts.length,2);assert.equal(puts[0],puts[1]);
+ assert.equal(p.data.has('wuwa-cancellation-123'),false);
+});
+
+test('old cancelled draw is marked invalid instead of applied to the new activity',async()=>{
+ const op={...old,key:'old-key'};
+ const p=await page('app.js',{storage:{'wuwa-draw-123':JSON.stringify(op)},fetch:async url=>{
+  if(url==='/api/session')return response({user_id:'123',csrf:'x',approved:true});
+  if(url==='/api/activity-default')return response({version:0,guild_id:null,guild_invite_url:null});
+  if(url==='/api/activities/current')return response({activity:current,opening_generation:2});
+  if(url==='/api/environment')return response({version:1,value:''});
+  if(url.includes('/draws/'))return response({draw:{winner_ordinal:7,rule_version:1},invalid:true});
+  throw Error(url);
+ }});await flush();assert.match(p.get('draw-result').textContent,/無效/);assert.doesNotMatch(p.get('draw-result').textContent,/本次中獎/);
+});
+
+test('unknown old cancellation cannot target a newer activity or unlock pending opening',async()=>{
+ const op={...old,key:'original-cancel'},opening={id:current.id,guild_id:null,expected_generation:1};let reads=0;
+ const p=await page('app.js',{storage:{'wuwa-cancellation-123':JSON.stringify(op),'wuwa-open-123':JSON.stringify(opening)},fetch:async url=>{
+  if(url==='/api/session')return response({user_id:'123',csrf:'x',approved:true});
+  if(url==='/api/activity-default')return response({version:0,guild_id:null,guild_invite_url:null});
+  if(url==='/api/activities/current')return response({activity:current,opening_generation:2});
+  if(url==='/api/environment')return response({version:1,value:''});
+  if(url.endsWith('/draw-results/latest'))return response({},404);
+  if(url===`/api/activities/${old.id}/status`)return ++reads===1?response({},503):response({...old,status:'cancelled',status_version:2});
+  throw Error(url);
+ }});await flush();assert.equal(p.data.get('wuwa-cancellation-123'),JSON.stringify(op));assert.equal(p.button('正常結束並結算').hidden,true);
+ await p.button('重新確認取消').click();assert.equal(p.data.has('wuwa-cancellation-123'),false);assert.equal(p.calls.filter(c=>c.method==='PUT').length,0);
+ assert.equal(p.calls.filter(c=>c.url===`/api/activities/${old.id}/status`).length,2);
+});
+
+test('late same-activity draw read cannot restore a valid winner after cancellation',async()=>{
+ const op={...old,key:'draw-key'};let state='open',drawReads=0,release;
+ const delayed=new Promise(resolve=>{release=resolve;});
+ const p=await page('app.js',{storage:{'wuwa-draw-123':JSON.stringify(op)},fetch:async(url,options={})=>{
+  if(url==='/api/session')return response({user_id:'123',csrf:'x',approved:true});
+  if(url==='/api/activity-default')return response({version:0,guild_id:null,guild_invite_url:null});
+  if(url==='/api/activities/current')return response({activity:state==='cancelled'?null:{...old,status:state,status_version:0},opening_generation:1});
+  if(url==='/api/environment')return response({version:1,value:''});
+  if(url.includes('/draws/')){drawReads++;if(drawReads===2){await delayed;return response({draw:{winner_ordinal:7,rule_version:1}});}return response({draw:{winner_ordinal:7,rule_version:1},invalid:state==='cancelled'});}
+  if(url.includes('/cancellations/')&&options.method==='PUT'){state='cancelled';return response({status:state});}
+  if(url===`/api/activities/${old.id}/status`)return response({...old,status:state,status_version:2});
+  throw Error(url);
+ }});await flush();const late=p.get('reload-activity').handlers.click();await flush();assert.equal(drawReads,2);
+ await p.button('取消場次並恢復分數').click();assert.match(p.get('draw-result').textContent,/無效/);
+ release();await late;assert.match(p.get('draw-result').textContent,/無效/);assert.doesNotMatch(p.get('draw-result').textContent,/本次中獎/);
+});

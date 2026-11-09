@@ -4,7 +4,7 @@ const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}
 function page(u:URL):number|null {const p=[...u.searchParams];if(p.length>1||p.some(([k,v])=>k!=='cursor'||!/^\d{1,15}$/.test(v)))return null;const n=Number(u.searchParams.get('cursor')||0);return Number.isSafeInteger(n)?n:null;}
 export async function publicResults(req:Request,db:D1Database,owner:string):Promise<Response>{
  const u=new URL(req.url),cursor=page(u);if(cursor===null)return json({error:'invalid query'},400);
- const rows=await db.prepare("SELECT COALESCE(d.winner_display_name,'中獎者') AS display_name FROM draws d JOIN activities a ON a.id=d.activity_id AND a.owner_id=d.owner_id WHERE a.owner_id=? AND a.status IN ('initializing','open','paused','settling','cancelling') ORDER BY d.rowid LIMIT 51 OFFSET ?").bind(owner,cursor).all<{display_name:string}>();
+ const rows=await db.prepare("SELECT COALESCE(d.winner_display_name,'中獎者') AS display_name FROM draws d JOIN activities a ON a.id=d.activity_id AND a.owner_id=d.owner_id WHERE a.owner_id=? AND a.status IN ('initializing','open','paused','settling') ORDER BY d.rowid LIMIT 51 OFFSET ?").bind(owner,cursor).all<{display_name:string}>();
  return json({winners:rows.results.slice(0,50),next_cursor:rows.results.length>50?cursor+50:null});
 }
 export async function chance(req:Request,db:D1Database,owner:string,viewer:string):Promise<Response>{

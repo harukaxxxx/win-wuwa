@@ -1,0 +1,47 @@
+{
+  "synthetic": true,
+  "metrics": {
+    "innerWidth": 390,
+    "clientWidth": 390,
+    "scrollWidth": 390,
+    "pending": {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "rule_version": 1,
+      "key": "1e08f6e4-ec91-41ef-992d-4dddc75675f5"
+    },
+    "openHidden": true
+  },
+  "pending": {
+    "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "rule_version": 1,
+    "key": "1e08f6e4-ec91-41ef-992d-4dddc75675f5"
+  },
+  "puts": [
+    {
+      "method": "PUT",
+      "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/cancellations/1e08f6e4-ec91-41ef-992d-4dddc75675f5",
+      "status": 202
+    },
+    {
+      "method": "PUT",
+      "url": "/api/activities/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/cancellations/1e08f6e4-ec91-41ef-992d-4dddc75675f5",
+      "status": 200
+    }
+  ],
+  "scoreCount": 1003,
+  "restoredWinner": 7,
+  "restoredFixtureScores": 1001,
+  "publicWinners": 0,
+  "opened": {
+    "id": "13f567d9-c24e-4788-95f9-6fefc22aa28b",
+    "status": "open",
+    "status_version": 0,
+    "rule_version": 1,
+    "guild_id": null,
+    "guild_invite_url": null,
+    "created_at": 1794234372,
+    "expected_generation": 0
+  },
+  "emptyRoster": 0,
+  "disabledNoDrawScoresUnchanged": true
+}

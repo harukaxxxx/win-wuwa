@@ -6,7 +6,7 @@
 - [領域詞彙](CONTEXT.md)
 - 已確認的取捨：[主播環境隔離](docs/adr/0001-streamer-isolation.md)、[取消的分數補償](docs/adr/0002-cancellation-compensation.md)。
 
-目前有 issue #8 **隔離合成資料**原型、#9 資格管理、#10 本機開場、#11 本機觀眾入口與報名、#12 合成群資格、#13 本機暫停／退出、#14 本機快照抽選及 #15 本機正常結算／續跑 UI；#15 已以本機 D1 驗證 session 撤銷／過期提交邊界，以及以隔離合成瀏覽器重跑未知回應後的讀回和續跑。取消恢復及正式部署均未完成，正常結算尚未做真 provider／遠端 D1／實機驗收。登入不授予主播資格；本機測試資料中的核准不決定正式管理政策。見 [issue #8 證據](docs/issue-8-evidence.md)、[issue #10 證據](docs/issue-10-evidence.md)、[issue #11 證據](docs/issue-11-evidence.md)、[issue #12 證據與真供應商限制](docs/issue-12-evidence.md)、[issue #13 證據與缺口](docs/issue-13-evidence.md)、[issue #14 證據與限制](docs/issue-14-evidence.md)、[issue #15 隔離驗收與限制](docs/issue-15-evidence.md)。
+目前有 issue #8 **隔離合成資料**原型、#9 資格管理、#10 本機開場、#11 本機觀眾入口與報名、#12 合成群資格、#13 本機暫停／退出、#14 本機快照抽選、#15 本機正常結算／續跑 UI，以及 #18 本機取消恢復 API 與 UI。#18 最新程式通過完整本機測試與最後版合成瀏覽器流程，正式部署、真 provider／遠端 D1／實機均未驗收。登入不授予主播資格；本機測試資料中的核准不決定正式管理政策。見 [issue #8 證據](docs/issue-8-evidence.md)、[issue #10 證據](docs/issue-10-evidence.md)、[issue #11 證據](docs/issue-11-evidence.md)、[issue #12 證據與真供應商限制](docs/issue-12-evidence.md)、[issue #13 證據與缺口](docs/issue-13-evidence.md)、[issue #14 證據與限制](docs/issue-14-evidence.md)、[issue #15 隔離驗收與限制](docs/issue-15-evidence.md)、[issue #18 證據與缺口](docs/issue-18-evidence.md)。
 
 目前另有 #16 本機合成切片：報名時固定名稱快照，依本場群暱稱 → Discord 全域名稱 → 打碼 username →「中獎者」取用；打碼降低曝光但非匿名。公開 winner、本人單抽機率、主播本人名單及 Discord 聯絡入口；結算後本人仍可回查聯絡資料，剪貼簿合成拒絕時可手動選取複製。候選變更版本及最後已知更新時間持久化，舊資料時間可能未知；`as_of` 仍是讀取時間。公開結果目前只顯示未完成場次。真 Discord、遠端 D1、裝置及完整隱私保留仍未驗收，詳見 [issue #16 證據與缺口](docs/issue-16-evidence.md)。
 
@@ -16,7 +16,7 @@
 
 ## Issue #10 本機開場切片（整票未驗收）
 
-本人可開場、鎖定選填群組與固定規則版本並重整接回；D1 原子建立有分觀眾基準，同一主播未完成場次占位，停用不刪除現場。本人版本化的下次群組預設與場次快照分開保存；開場時可確認或修改，改預設不改現場。API 使用 UUID 和服務端開場世代防止延遲首次提交；各分頁以 sessionStorage 保存未知操作，舊 localStorage 紀錄保留並要求核對，僅手動丟棄，不自動重送。合成測試涵蓋 SIGKILL、兩分頁延遲首次送出及實際預設修改；Promise.all 不證明兩請求同進 Worker 的交錯。取消恢復尚未實作，抽選已有本機合成切片，不能以此版本實際舉辦活動。尚未驗證真 Discord、遠端 D1、真裝置或任何部署。詳見[證據及限制](docs/issue-10-evidence.md)。
+本人可開場、鎖定選填群組與固定規則版本並重整接回；D1 原子建立有分觀眾基準，同一主播未完成場次占位，停用不刪除現場。本人版本化的下次群組預設與場次快照分開保存；開場時可確認或修改，改預設不改現場。API 使用 UUID 和服務端開場世代防止延遲首次提交；各分頁以 sessionStorage 保存未知操作，舊 localStorage 紀錄保留並要求核對，僅手動丟棄，不自動重送。合成測試涵蓋 SIGKILL、兩分頁延遲首次送出及實際預設修改；Promise.all 不證明兩請求同進 Worker 的交錯。後續取消恢復切片的進度見 #18，尚未驗證真 Discord、遠端 D1、真裝置或任何部署，不能用此版本實際舉辦活動。詳見[開場證據及限制](docs/issue-10-evidence.md)。
 
 ## Issue #9 本機開發中（尚未完成）
 
