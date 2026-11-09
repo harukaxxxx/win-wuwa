@@ -6,11 +6,11 @@
 - [領域詞彙](CONTEXT.md)
 - 已確認的取捨：[主播環境隔離](docs/adr/0001-streamer-isolation.md)、[取消的分數補償](docs/adr/0002-cancellation-compensation.md)。
 
-目前有 issue #8 **隔離合成資料**原型、#9 資格管理，以及 #10 本機開場切片；報名、抽選、結算、取消恢復及正式部署均未完成。登入不授予主播資格；本機測試資料中的核准不決定正式管理政策。見 [issue #8 證據](docs/issue-8-evidence.md)、[issue #10 證據](docs/issue-10-evidence.md)。
+目前有 issue #8 **隔離合成資料**原型、#9 資格管理、#10 本機開場，以及 #11 本機觀眾入口和報名切片；抽選、結算、取消恢復及正式部署均未完成。登入不授予主播資格；本機測試資料中的核准不決定正式管理政策。見 [issue #8 證據](docs/issue-8-evidence.md)、[issue #10 證據](docs/issue-10-evidence.md)、[issue #11 本機切片](docs/issue-11-evidence.md)。
 
 ## Issue #10 本機開場切片（整票未驗收）
 
-本人可開場、鎖定選填群組與固定規則版本並重整接回；D1 原子建立有分觀眾基準，同一主播未完成場次占位，停用不刪除現場。本人版本化的下次群組預設與場次快照分開保存；開場時可確認或修改，改預設不改現場。API 使用 UUID 和服務端開場世代防止延遲首次提交；各分頁以 sessionStorage 保存未知操作，舊 localStorage 紀錄保留並要求核對，僅手動丟棄，不自動重送。合成測試涵蓋 SIGKILL、兩分頁延遲首次送出及實際預設修改；Promise.all 不證明兩請求同進 Worker 的交錯。取消恢復、報名與抽選均尚未實作；群組成員驗證尚未實作，不能以此版本實際舉辦活動。尚未驗證真 Discord、遠端 D1、真裝置或任何部署。詳見[證據及限制](docs/issue-10-evidence.md)。
+本人可開場、鎖定選填群組與固定規則版本並重整接回；D1 原子建立有分觀眾基準，同一主播未完成場次占位，停用不刪除現場。本人版本化的下次群組預設與場次快照分開保存；開場時可確認或修改，改預設不改現場。API 使用 UUID 和服務端開場世代防止延遲首次提交；各分頁以 sessionStorage 保存未知操作，舊 localStorage 紀錄保留並要求核對，僅手動丟棄，不自動重送。合成測試涵蓋 SIGKILL、兩分頁延遲首次送出及實際預設修改；Promise.all 不證明兩請求同進 Worker 的交錯。取消恢復與抽選尚未實作，報名已有本機 API 與觀眾頁切片；群組成員驗證尚未實作，不能以此版本實際舉辦活動。尚未驗證真 Discord、遠端 D1、真裝置或任何部署。詳見[證據及限制](docs/issue-10-evidence.md)。
 
 ## Issue #9 本機開發中（尚未完成）
 
@@ -31,6 +31,23 @@ npm run dev -- --port 19387
 在同一台電腦開啟 `http://127.0.0.1:19387/`。未設定 OAuth 時登入回 503；這不是 fixture 登入。測試以 `npm run typecheck`、`npm test` 執行。登入 Discord 需既有、另行授權的 app，精確註冊 `http://127.0.0.1:19387/auth/callback`（實際 Discord 是否允許該註冊及完整流程尚未驗證）；自行透過安全本機方式設定 Wrangler 本地秘密 `DISCORD_CLIENT_ID`、`DISCORD_CLIENT_SECRET` 及 `ORIGIN=http://127.0.0.1:19387`，不要在聊天提供秘密。不要將 `.dev.vars` 提交。使用者必須已核准才可存讀；管理資格需要另行配置 `ADMIN_DISCORD_ID`。測試僅使用合成 ID。停止伺服器用 Ctrl-C。
 
 此原型以本機 SQL 每 UTC 日限制最多 1000 次登入啟動、最多各 1000 筆 state/session，登入時分批清理過期紀錄；這是原型內部保護，不是已核准的產品限額。額度被耗盡會拒絕其他使用者，且這不是完整抗 DoS 或正式營運保護。不得對外公開或部署；遠端 D1、真實 Discord、帳戶額度與使用者裝置均未驗收。
+
+## Issue #11 觀眾報名合成瀏覽器驗收
+
+本機新 migrations 0007、0008 必須先套用。主播登入後可取得 `/s/<主播 Discord ID>` 固定入口；觀眾只看到公開場次與自己的報名。OAuth 返回仍須本人按確認，群資格驗證尚未完成而一律阻擋限制群報名。隱私保留政策已顯示，但自動清理尚未實作，亦未完成法律審查。請勿部署或使用真帳號。
+
+以獨立 loopback fixture 測試（不啟用原 19481 LAN preview）：
+
+```sh
+npm run build
+WUWA_VIEWER_QA=1 WUWA_FIXTURE_PORT=19573 node test/browser-fixture.mjs
+# 另一個 shell，等待 FIXTURE READY 後執行；每次須重啟 fixture 重置合成 D1
+ego-browser nodejs < test/browser-viewer-qa.mjs
+# 重新啟動 fixture 後另行執行故障測試
+ego-browser nodejs < test/browser-viewer-failures.mjs
+```
+
+腳本以合成主播 123 和觀眾 300/301 測試序號 1/2、登出、重整隔離、拒絕後重試與登入途中換場；故障腳本另外截斷已寫入的回應、使本人讀取失敗並確認換場不默投。只會呼叫隔離的假 Discord，測試結束 Ctrl-C。fixture 的測試控制只在 loopback 且顯式 opt-in 可用，不在 Worker 生產程式。正式 Wrangler 靜態路由已另於本機實測，仍不等於遠端 Cloudflare、真 Discord、遠端 D1 或手機實測。
 
 ## 合成 OAuth 瀏覽器驗收
 

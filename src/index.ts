@@ -12,28 +12,47 @@ async function handler(req: Request, env: Env): Promise<Response> {
  const u = new URL(req.url); const origin = env.ORIGIN;
  if (u.pathname === '/auth/login' && req.method === 'GET') {
   if (!origin || !env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || u.origin !== origin) return json({ error: 'OAuth not configured' }, 503);
+  const params=[...u.searchParams]; let context: {owner:string;id:string;version:number}|null=null;
+  if(params.length) {
+   if(params.length!==3 || !['owner','activity_id','rule_version'].every(k=>u.searchParams.getAll(k).length===1)) return json({error:'invalid login context'},400);
+   const owner=u.searchParams.get('owner')!,id=u.searchParams.get('activity_id')!,v=u.searchParams.get('rule_version')!;
+   if(!/^\d{1,32}$/.test(owner)||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id)||!/^[1-9]\d*$/.test(v)||!Number.isSafeInteger(Number(v)))return json({error:'invalid login context'},400);
+   const found=await env.DB.prepare("SELECT id FROM activities WHERE id=? AND owner_id=? AND rule_version=? AND status IN ('initializing','open','paused','settling','cancelling')").bind(id,owner,Number(v)).first();
+   if(!found)return json({error:'stale activity or rules'},409); context={owner,id,version:Number(v)};
+  }
   const day=Math.floor(now()/86400); await env.DB.prepare('DELETE FROM login_budget WHERE day<>?').bind(day).run();
   const budget=await env.DB.prepare('INSERT INTO login_budget VALUES (?,1) ON CONFLICT(day) DO UPDATE SET starts=starts+1 WHERE starts<1000 RETURNING starts').bind(day).first(); if (!budget) return json({error:'login capacity'},503);
   await env.DB.batch([env.DB.prepare('DELETE FROM oauth_states WHERE state_hash IN (SELECT state_hash FROM oauth_states WHERE expires<=? LIMIT 100)').bind(now()),env.DB.prepare('DELETE FROM sessions WHERE session_hash IN (SELECT session_hash FROM sessions WHERE expires<=? LIMIT 100)').bind(now())]);
   const state = random(), verifier = random(); const admitted = await env.DB.prepare('INSERT INTO oauth_states SELECT ?,?,? WHERE (SELECT COUNT(*) FROM oauth_states)<1000 RETURNING state_hash').bind(await hash(state), now()+300, verifier).first(); if (!admitted) return json({error:'login capacity'},503);
+  if(context) { await env.DB.batch([env.DB.prepare('DELETE FROM viewer_oauth_context WHERE expires<=?').bind(now()),env.DB.prepare('DELETE FROM viewer_login_intents WHERE expires<=?').bind(now()),env.DB.prepare('INSERT INTO viewer_oauth_context VALUES (?,?,?,?,?)').bind(await hash(state),context.owner,context.id,context.version,now()+300)]); }
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   const a = new URL('https://discord.com/oauth2/authorize'); a.search = new URLSearchParams({ client_id: env.DISCORD_CLIENT_ID, redirect_uri: origin + '/auth/callback', response_type: 'code', scope: 'identify', state, code_challenge: challenge, code_challenge_method:'S256' }).toString();
-  return redirect(a.toString(), [setCookie('__Host-oauth', state, 300)]);
+  return redirect(a.toString(), [setCookie(context ? '__Host-oauth-'+state : '__Host-oauth', state, 300)]);
  }
  if (u.pathname === '/auth/callback' && req.method === 'GET') {
   if (!origin || u.origin !== origin || !env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET) return json({error:'OAuth not configured'},503);
   const state = u.searchParams.get('state') ?? ''; const code = u.searchParams.get('code') ?? '';
-  if (!/^[a-f0-9]{64}$/.test(state) || state !== cookie(req, '__Host-oauth') || !code || u.searchParams.get('iss') !== 'https://discord.com') return json({error:'invalid authorization'},400);
+  if (!/^[a-f0-9]{64}$/.test(state) || (state !== cookie(req, '__Host-oauth-'+state) && state !== cookie(req, '__Host-oauth')) || !code || u.searchParams.get('iss') !== 'https://discord.com') return json({error:'invalid authorization'},400);
   const used = await env.DB.prepare('DELETE FROM oauth_states WHERE state_hash=? AND expires>? RETURNING verifier').bind(await hash(state), now()).first<{verifier:string}>();
   if (!used) return json({error:'invalid authorization'},400);
+  const viewerFlow=state===cookie(req,'__Host-oauth-'+state);
+  const context=viewerFlow ? await env.DB.prepare('DELETE FROM viewer_oauth_context WHERE state_hash=? AND expires>? RETURNING owner_id,activity_id,rule_version').bind(await hash(state),now()).first<{owner_id:string;activity_id:string;rule_version:number}>() : null;
+  if(viewerFlow&&!context)return json({error:'invalid authorization'},400);
   const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {method:'POST', redirect:'manual', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({client_id:env.DISCORD_CLIENT_ID,client_secret:env.DISCORD_CLIENT_SECRET,grant_type:'authorization_code',code,redirect_uri:origin+'/auth/callback',code_verifier:used.verifier})});
   if (!tokenResponse.ok) return json({error:'provider failed'},502);
   const token = await tokenResponse.json<{access_token?:string; token_type?:string}>(); if (!token.access_token || token.token_type?.toLowerCase() !== 'bearer') return json({error:'provider failed'},502);
   const userResponse = await fetch('https://discord.com/api/users/@me', {headers:{Authorization:`Bearer ${token.access_token}`}, redirect:'manual'}); if (!userResponse.ok) return json({error:'provider failed'},502);
   const user = await userResponse.json<{id?:string}>(); if (!user.id || !/^\d{1,32}$/.test(user.id)) return json({error:'provider failed'},502);
   const sid=random(), csrf=random(); const admitted=await env.DB.prepare('INSERT INTO sessions SELECT ?,?,?,? WHERE (SELECT COUNT(*) FROM sessions)<1000 RETURNING session_hash').bind(await hash(sid),user.id,await hash(csrf),now()+28800).first(); if (!admitted) return json({error:'login capacity'},503);
-  return redirect('/',[setCookie('__Host-session',sid,28800),setCookie('__Host-oauth','',0),setCookie('__Host-csrf',csrf,28800)]);
+  let destination='/'; if(context) { const intent=random(); await env.DB.prepare('INSERT INTO viewer_login_intents VALUES (?,?,?,?,?,?)').bind(await hash(intent),await hash(sid),context.owner_id,context.activity_id,context.rule_version,now()+1800).run(); destination='/s/'+context.owner_id+'?intent='+intent; }
+  return redirect(destination,[setCookie('__Host-session',sid,28800),setCookie(context?'__Host-oauth-'+state:'__Host-oauth','',0),setCookie('__Host-csrf',csrf,28800)]);
+ }
+ const viewerPublic=u.pathname.match(/^\/api\/viewer\/(\d{1,32})$/);
+ if(viewerPublic && req.method==='GET') {
+  if(u.search) return json({error:'invalid query'},400);
+  const activity=await env.DB.prepare("SELECT a.id,a.status,a.rule_version,CASE WHEN a.guild_id IS NULL THEN 0 ELSE 1 END AS guild_required,(SELECT COUNT(*) FROM registrations r WHERE r.activity_id=a.id AND r.status='registered') AS count FROM activities a WHERE a.owner_id=? AND a.status IN ('initializing','open','paused','settling','cancelling')").bind(viewerPublic[1]).first();
+  return json({activity:activity ?? null});
  }
  if (u.pathname.startsWith('/api/')) {
   const s = await session(req,env); if (!s) return json({error:'unauthenticated'},401);
@@ -41,6 +60,36 @@ async function handler(req: Request, env: Env): Promise<Response> {
   const admin=!!env.ADMIN_DISCORD_ID && /^\d{1,32}$/.test(env.ADMIN_DISCORD_ID) && s.user_id===env.ADMIN_DISCORD_ID;
   if (u.pathname === '/api/session' && req.method === 'GET') { const c=cookie(req,'__Host-csrf'); if (!/^[a-f0-9]{64}$/.test(c) || await hash(c)!==s.csrf_hash) return json({error:'session invalid'},401); const approved=await env.DB.prepare("SELECT user_id FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); return json({csrf:c,approved:!!approved,admin,user_id:s.user_id}); }
   if (u.pathname === '/api/logout' && req.method === 'POST') { await env.DB.prepare('DELETE FROM sessions WHERE session_hash=?').bind(await hash(cookie(req,'__Host-session'))).run(); const h=new Headers(headers); h.append('Set-Cookie',setCookie('__Host-session','',0)); h.append('Set-Cookie',setCookie('__Host-csrf','',0)); return new Response(null,{status:204,headers:h}); }
+  const intent=u.pathname.match(/^\/api\/viewer-intent\/([a-f0-9]{64})$/);
+  if(intent && req.method==='GET') { if(u.search)return json({error:'invalid query'},400); const row=await env.DB.prepare('SELECT owner_id,activity_id,rule_version FROM viewer_login_intents WHERE intent_hash=? AND session_hash=? AND expires>?').bind(await hash(intent[1]),await hash(cookie(req,'__Host-session')),now()).first(); return row ? json(row) : json({error:'invalid intent'},404); }
+  const self=u.pathname.match(/^\/api\/viewer\/(\d{1,32})\/self$/);
+  if(self && req.method==='GET') {
+   const params=[...u.searchParams];
+   if(params.length!==2 || !u.searchParams.has('activity_id') || !u.searchParams.has('rule_version') || !/^[1-9]\d*$/.test(u.searchParams.get('rule_version') ?? ''))return json({error:'invalid query'},400);
+   const id=u.searchParams.get('activity_id'),version=Number(u.searchParams.get('rule_version'));
+   const activity=await env.DB.prepare('SELECT status FROM activities WHERE id=? AND owner_id=? AND rule_version=?').bind(id,self[1],version).first<{status:string}>();
+   if(!activity)return json({error:'stale activity or rules'},409);
+   const row=await env.DB.prepare('SELECT ordinal,status FROM registrations WHERE activity_id=? AND owner_id=? AND viewer_id=?').bind(id,self[1],s.user_id).first();
+   const result=row ?? {ordinal:null,status:null};
+   return json(['cancelled','settled'].includes(activity.status) ? {...result,terminal:true} : result);
+  }
+  const registration=u.pathname.match(/^\/api\/viewer\/(\d{1,32})\/register$/);
+  if(registration && req.method==='POST') {
+   if(u.search) return json({error:'invalid query'},400);
+   let value:unknown; try{value=await req.json();}catch{return json({error:'invalid'},400);}
+   if(!value || typeof value!=='object' || Array.isArray(value))return json({error:'invalid'},400);
+   const b=value as Record<string,unknown>;
+   if(Object.keys(b).sort().join(',')!=='activity_id,rule_version' || typeof b.activity_id!=='string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(b.activity_id) || !Number.isSafeInteger(b.rule_version))return json({error:'invalid'},400);
+   const owner=registration[1],id=b.activity_id;
+   const row=await env.DB.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) SELECT a.id,a.owner_id,?,COALESCE((SELECT MAX(ordinal) FROM registrations WHERE activity_id=a.id),0)+1 FROM activities a JOIN approved_streamers s ON s.user_id=a.owner_id WHERE a.id=? AND a.owner_id=? AND a.rule_version=? AND a.status='open' AND a.guild_id IS NULL AND s.status='approved' ON CONFLICT(activity_id,viewer_id) DO NOTHING RETURNING ordinal,status").bind(s.user_id,id,owner,b.rule_version).first();
+   if(row)return json(row);
+   const state=await env.DB.prepare("SELECT a.status,a.guild_id,s.status AS owner_status FROM activities a JOIN approved_streamers s ON s.user_id=a.owner_id WHERE a.id=? AND a.owner_id=? AND a.rule_version=?").bind(id,owner,b.rule_version).first<{status:string;guild_id:string|null;owner_status:string}>();
+   if(!state || state.status!=='open')return json({error:'stale activity or rules'},409);
+   if(state.owner_status!=='approved')return json({error:'streamer disabled'},403);
+   if(state.guild_id!==null)return json({error:'需要群資格驗證，尚未可用'},403);
+   const existing=await env.DB.prepare('SELECT ordinal,status FROM registrations WHERE activity_id=? AND owner_id=? AND viewer_id=?').bind(id,owner,s.user_id).first();
+   return existing ? json(existing) : json({error:'conflict'},409);
+  }
   if (u.pathname.startsWith('/api/admin/')) {
    if (!admin) return json({error:'forbidden'},403);
    if (u.pathname==='/api/admin/usage' && req.method==='GET') { if(u.search) return json({error:'invalid query'},400); const day=Math.floor(now()/86400); const row=await env.DB.prepare('SELECT starts FROM login_budget WHERE day=?').bind(day).first<{starts:number}>(); return json({utc_day:day,login_starts:row?.starts ?? 0,scope:'admitted_login_starts'}); }
@@ -114,6 +163,7 @@ async function handler(req: Request, env: Env): Promise<Response> {
   }
   return json({error:'not found'},404);
  }
+ if (/^\/s\/\d{1,32}$/.test(u.pathname)) { const target=new URL('/viewer',u); return env.ASSETS.fetch(new Request(target,req)); }
  return env.ASSETS.fetch(req);
 }
 export default { async fetch(req: Request, env: Env): Promise<Response> { try { return await handler(req,env); } catch { return json({error:'request failed'},500); } } };

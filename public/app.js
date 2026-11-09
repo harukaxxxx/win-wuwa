@@ -2,7 +2,7 @@ const $=id=>document.getElementById(id); let csrf='',version=0;
 async function load(){
  try { const session=await fetch('/api/session'); if(session.status===401)return; if(!session.ok)throw Error(); const data=await session.json(); csrf=data.csrf; $('signed-out').hidden=true; $('workspace').hidden=false;
  if(data.admin){$('admin').hidden=false; refreshAdmin();}
- activityOwner=data.user_id; activityApproved=data.approved; await refreshDefault(); await refreshActivity();
+ activityOwner=data.user_id; activityApproved=data.approved; $('viewer-entry').href='/s/'+encodeURIComponent(activityOwner); await refreshDefault(); await refreshActivity();
  if(!data.approved){$('permission').textContent='此身分未獲核准或已停用；仍可查看自己的未完成場次。';return;}
  $('permission').textContent='本人隔離環境'; const res=await fetch('/api/environment'); if(!res.ok)throw Error(); const row=await res.json(); version=row.version; $('value').value=row.value; $('editor').hidden=false;
  }catch{$('message').textContent='讀取失敗；請稍後重試。';}
