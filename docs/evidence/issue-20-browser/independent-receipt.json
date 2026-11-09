@@ -1,0 +1,108 @@
+{
+  "synthetic": true,
+  "isolation": "two host-only cookie sessions, same Chromium browser context, not two devices",
+  "sameContext": true,
+  "concurrentUsers": [
+    "123",
+    "300"
+  ],
+  "viewer2": "301",
+  "csrfDistinct": true,
+  "wrongHostOriginStatus": 403,
+  "pausedStaleRegistration": "rejected and empty roster",
+  "withdrawReRegisterStatus": 409,
+  "registrations": [
+    {
+      "viewer_id": "300",
+      "ordinal": 1,
+      "status": "withdrawn"
+    },
+    {
+      "viewer_id": "301",
+      "ordinal": 2,
+      "status": "winner"
+    }
+  ],
+  "draws": [
+    {
+      "winner_ordinal": 2,
+      "request_key": "735d4763-c3e6-4061-b0cc-5df5d9c35821"
+    }
+  ],
+  "drawPutsBeforeAndAfterReload": 1,
+  "publicResult": {
+    "winners": [
+      {
+        "display_name": "測試顯示 301"
+      }
+    ],
+    "next_cursor": null
+  },
+  "focus": {
+    "id": "register",
+    "focusVisible": false,
+    "outline": "none",
+    "width": 390,
+    "client": 390,
+    "scroll": 390
+  },
+  "touch": "CDP touchStart/touchEnd",
+  "guild": {
+    "pending": "disabled",
+    "states": [
+      {
+        "mode": "nonmember",
+        "message": "尚未加入群組；請向主播取得邀請。",
+        "registerDisabled": true,
+        "inviteHidden": false,
+        "invite": "https://discord.gg/fixture",
+        "target": "_blank",
+        "rel": "noopener noreferrer",
+        "memberCalls": 1
+      },
+      {
+        "mode": "rate",
+        "message": "Discord 暫時限制查詢，請等待 30 秒後重新驗證。",
+        "registerDisabled": true,
+        "inviteHidden": true,
+        "invite": null,
+        "target": "_blank",
+        "rel": "noopener noreferrer",
+        "memberCalls": 1
+      },
+      {
+        "mode": "error",
+        "message": "無法確認群組資格，請稍後重新驗證。",
+        "registerDisabled": true,
+        "inviteHidden": true,
+        "invite": null,
+        "target": "_blank",
+        "rel": "noopener noreferrer",
+        "memberCalls": 1
+      },
+      {
+        "mode": "member",
+        "message": "已確認群組資格。",
+        "registerDisabled": false,
+        "inviteHidden": true,
+        "invite": null,
+        "target": "_blank",
+        "rel": "noopener noreferrer",
+        "memberCalls": 1
+      }
+    ],
+    "guildResult": {
+      "winners": [
+        {
+          "display_name": "群暱稱 300"
+        }
+      ],
+      "next_cursor": null
+    }
+  },
+  "clipboard": {
+    "active": "username",
+    "selected": "fixture_300",
+    "link": "https://discord.com/users/300"
+  }
+}

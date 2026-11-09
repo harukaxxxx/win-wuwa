@@ -1,0 +1,99 @@
+{
+  "synthetic": true,
+  "sessionIsolation": "sequential identities, one browser host/context",
+  "activity": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "focus": {
+    "id": "login",
+    "visible": true,
+    "outline": "rgb(255, 255, 255) solid 3px",
+    "boxShadow": "none",
+    "inner": 390,
+    "client": 390,
+    "scroll": 390
+  },
+  "oauthDenied": {
+    "url": "http://localhost:19986/s/123",
+    "registrations": 0
+  },
+  "dedupe": {
+    "sameActivityUserRule": true,
+    "replay": {
+      "ordinal": 1,
+      "status": "registered"
+    },
+    "count": 1
+  },
+  "chance1": {
+    "ordinal": 1,
+    "status": "registered",
+    "score": 0,
+    "probability": 1,
+    "as_of": 1794237785,
+    "candidate_revision": 1,
+    "candidate_updated_at": "2026-11-09T15:23:05.028Z",
+    "activity_status": "open"
+  },
+  "chance2": {
+    "ordinal": 1,
+    "status": "registered",
+    "score": 0,
+    "probability": 0.5004091653027823,
+    "as_of": 1794237793,
+    "candidate_revision": 2,
+    "candidate_updated_at": "2026-11-09T15:23:08.790Z",
+    "activity_status": "open"
+  },
+  "chanceText": "狀態：已報名 · 序號 1 · 分數 0 · 目前單抽機率 50.04%。候選資料更新時間 2026/11/9 下午11:23:08 · 資料版本 2；名單變動會改變機率，並非整場中獎保證。",
+  "masked": {
+    "public": {
+      "winners": [
+        {
+          "display_name": "f***0"
+        }
+      ],
+      "next_cursor": null
+    },
+    "viewerDOM": {
+      "url": "/s/123",
+      "winner": "f***0",
+      "visible": true,
+      "rawUsernamePresent": false
+    },
+    "memberCalls": 0
+  },
+  "roster": {
+    "first": 50,
+    "final": 53,
+    "unique": 53
+  },
+  "verification": {
+    "script_sha256": "1c1d41638d4888d546f26bfd577888e98ac6c995a30d9a3d31d9bce7101d298a",
+    "files_sha256": {
+      "test/browser-issue20-nonsettlement.mjs": "1c1d41638d4888d546f26bfd577888e98ac6c995a30d9a3d31d9bce7101d298a",
+      "docs/evidence/issue-20-browser/final-fixture.patch": "c19c69d72137064d9dba0bb81f43253504e8ae89d72f93027477d32b5c422841",
+      "src/index.ts": "6d64e3bd4fb2a7b0ccbdd4f5e228cbe40242476f14888c2bee02b9175b8a6539",
+      "public/index.html": "a19228a05a11528747b03f510f4fb00dd2717dd53e55efb5056298332c2aecb9",
+      "public/viewer.js": "c9570a5743988765f7495d182ed1f3150dae9cc2c26b86978ef4a95a74bf47ee",
+      "public/app.js": "a37aece1eff42dbbab7d382cfd67180985002e9edff965ba91da9fcd99e5b90b",
+      "package.json": "6fa5c405aa4a652e44f623095d8d3b41aa2ae93fb5497f9788a61776e6184c48",
+      "package-lock.json": "8f657a06a2ab181845c99b76eac9a40373005cf343e08f4a7f6c31b74d34c7ed"
+    },
+    "completed_pass_checkpoints": 3,
+    "checkpoints": [
+      "focus and denied OAuth",
+      "dedupe and chance",
+      "masked and roster"
+    ],
+    "fixture_port": 19986,
+    "full_script_single_run": true,
+    "full_suite": {
+      "tests": 191,
+      "pass": 191,
+      "fail": 0
+    },
+    "audits": {
+      "full_vulnerabilities": 0,
+      "production_vulnerabilities": 0
+    }
+  }
+}

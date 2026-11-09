@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "focus": {
+    "tag": "A",
+    "id": "login",
+    "text": "以 Discord 登入",
+    "focusVisible": true,
+    "outline": "solid",
+    "width": 1365,
+    "scroll": 1365
+  },
+  "registration": "你已報名 · 序號 1"
+}

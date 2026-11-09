@@ -54,12 +54,14 @@ async function handler(req: Request, env: Env): Promise<Response> {
  if (u.pathname === '/auth/callback' && req.method === 'GET') {
   if (!origin || u.origin !== origin || !env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET) return json({error:'OAuth not configured'},503);
   const state = u.searchParams.get('state') ?? ''; const code = u.searchParams.get('code') ?? '';
-  if (!/^[a-f0-9]{64}$/.test(state) || (state !== cookie(req, '__Host-oauth-'+state) && state !== cookie(req, '__Host-oauth')) || !code || u.searchParams.get('iss') !== 'https://discord.com') return json({error:'invalid authorization'},400);
+  const denied = u.searchParams.getAll('error').length===1 && u.searchParams.get('error')==='access_denied' && !u.searchParams.has('code');
+  if (u.searchParams.getAll('state').length!==1 || !/^[a-f0-9]{64}$/.test(state) || (state !== cookie(req, '__Host-oauth-'+state) && state !== cookie(req, '__Host-oauth')) || (denied ? (u.searchParams.has('iss') && u.searchParams.get('iss')!=='https://discord.com') : (!code || u.searchParams.has('error') || u.searchParams.get('iss') !== 'https://discord.com'))) return json({error:'invalid authorization'},400);
   const used = await env.DB.prepare('DELETE FROM oauth_states WHERE state_hash=? AND expires>? RETURNING verifier').bind(await hash(state), now()).first<{verifier:string}>();
   if (!used) return json({error:'invalid authorization'},400);
   const viewerFlow=state===cookie(req,'__Host-oauth-'+state);
   const context=viewerFlow ? await env.DB.prepare('DELETE FROM viewer_oauth_context WHERE state_hash=? AND expires>? RETURNING owner_id,activity_id,rule_version,guild_id').bind(await hash(state),now()).first<{owner_id:string;activity_id:string;rule_version:number;guild_id:string|null}>() : null;
   if(viewerFlow&&!context)return json({error:'invalid authorization'},400);
+  if(denied)return redirect(context?'/s/'+context.owner_id:'/',[setCookie(viewerFlow?'__Host-oauth-'+state:'__Host-oauth','',0)]);
   const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {method:'POST', redirect:'manual', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({client_id:env.DISCORD_CLIENT_ID,client_secret:env.DISCORD_CLIENT_SECRET,grant_type:'authorization_code',code,redirect_uri:origin+'/auth/callback',code_verifier:used.verifier})});
   if (!tokenResponse.ok) return json({error:'provider failed'},502);
   const token = await tokenResponse.json<{access_token?:string; token_type?:string;scope?:unknown}>(); if (typeof token.access_token!=='string' || !token.access_token || typeof token.token_type!=='string' || token.token_type.toLowerCase() !== 'bearer' || typeof token.scope!=='string' || !token.scope.split(' ').includes('identify') || (context?.guild_id && !token.scope.split(' ').includes('guilds.members.read'))) return json({error:'provider failed'},502);

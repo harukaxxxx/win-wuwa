@@ -1,0 +1,45 @@
+{
+  "synthetic": true,
+  "identityIsolation": "sequential on same host and context",
+  "replay": {
+    "ordinal": 1,
+    "status": "registered"
+  },
+  "countsBeforeAfter": 2,
+  "chanceBefore": {
+    "ordinal": 1,
+    "status": "registered",
+    "score": 0,
+    "probability": 0.5004091653027823,
+    "as_of": 1794237426,
+    "candidate_revision": 2,
+    "candidate_updated_at": "2026-11-09T15:15:53.353Z",
+    "activity_status": "open"
+  },
+  "chanceAfter": {
+    "ordinal": 1,
+    "status": "registered",
+    "score": 0,
+    "probability": 1,
+    "as_of": 1794237431,
+    "candidate_revision": 3,
+    "candidate_updated_at": "2026-11-09T15:17:08.653Z",
+    "activity_status": "open"
+  },
+  "textBefore": "狀態：已報名 · 序號 1 · 分數 0 · 目前單抽機率 50.04%。候選資料更新時間 2026/11/9 下午11:15:53 · 資料版本 2；名單變動會改變機率，並非整場中獎保證。",
+  "textAfter": "狀態：已報名 · 序號 1 · 分數 0 · 目前單抽機率 100.00%。候選資料更新時間 2026/11/9 下午11:17:08 · 資料版本 3；名單變動會改變機率，並非整場中獎保證。",
+  "masked": {
+    "winners": [
+      {
+        "display_name": "f***0"
+      }
+    ],
+    "next_cursor": null
+  },
+  "memberCalls": 0,
+  "roster": {
+    "first": 50,
+    "final": 53,
+    "unique": 53
+  }
+}
