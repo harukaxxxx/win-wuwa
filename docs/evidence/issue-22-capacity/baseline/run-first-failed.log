@@ -1,0 +1,32 @@
+fixture: 5 owners, 500 viewer identities, 1101 distinct absent historical scores per owner; SQL fixture excluded from request metrics
+PASS registrations: 2500 HTTP 200, 500 per owner
+PASS draw 1/20: 5 concurrent owners, snapshot 500 each
+PASS draw 2/20: 5 concurrent owners, snapshot 499 each
+PASS draw 3/20: 5 concurrent owners, snapshot 498 each
+PASS draw 4/20: 5 concurrent owners, snapshot 497 each
+PASS draw 5/20: 5 concurrent owners, snapshot 496 each
+PASS draw 6/20: 5 concurrent owners, snapshot 495 each
+PASS draw 7/20: 5 concurrent owners, snapshot 494 each
+PASS draw 8/20: 5 concurrent owners, snapshot 493 each
+PASS draw 9/20: 5 concurrent owners, snapshot 492 each
+PASS draw 10/20: 5 concurrent owners, snapshot 491 each
+PASS draw 11/20: 5 concurrent owners, snapshot 490 each
+PASS draw 12/20: 5 concurrent owners, snapshot 489 each
+PASS draw 13/20: 5 concurrent owners, snapshot 488 each
+PASS draw 14/20: 5 concurrent owners, snapshot 487 each
+PASS draw 15/20: 5 concurrent owners, snapshot 486 each
+PASS draw 16/20: 5 concurrent owners, snapshot 485 each
+PASS draw 17/20: 5 concurrent owners, snapshot 484 each
+PASS draw 18/20: 5 concurrent owners, snapshot 483 each
+PASS draw 19/20: 5 concurrent owners, snapshot 482 each
+PASS draw 20/20: 5 concurrent owners, snapshot 481 each
+PASS settlement: each owner 1101/1101 absences score 5→4, 480 registered 5→6, 20 winners 0, 1601 score rows preserved
+FAIL Error: D1_ERROR: not authorized: SQLITE_AUTH
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async file:///Users/haruka/.hermes/profiles/makino-futsuki/cache/scratch/issue22/test/capacity.mjs:41:19 {
+  [cause]: Error: not authorized: SQLITE_AUTH
+      at D1DatabaseSessionAlwaysPrimary._sendOrThrow (cloudflare-internal:d1-api:194:24)
+      at async cloudflare-internal:d1-api:417:19 {
+    [cause]: undefined
+  }
+}

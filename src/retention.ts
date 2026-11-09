@@ -36,7 +36,7 @@ export async function retention(req:Request,db:D1Database,admin:string,sessionHa
  try {
   const result=await db.batch([
    db.prepare(`INSERT INTO activity_tombstones(id,owner_id,status,completed_at) SELECT id,owner_id,status,completed_at FROM (${eligible}) WHERE id=? ON CONFLICT(id) DO NOTHING`).bind(owner,id),
-   page('draw_candidates','draw_id IN (SELECT id FROM draws WHERE activity_id=? AND owner_id=?)'),
+   db.prepare(`DELETE FROM draw_candidates WHERE (draw_id,viewer_id) IN (SELECT c.draw_id,c.viewer_id FROM draw_candidates c WHERE c.draw_id IN (SELECT id FROM draws WHERE activity_id=? AND owner_id=?) ORDER BY c.draw_id,c.viewer_id LIMIT 100) AND ${fence}`).bind(id,owner,id,owner),
    page('draws','activity_id=? AND owner_id=? AND NOT EXISTS (SELECT 1 FROM draw_candidates c WHERE c.draw_id=draws.id)'),
    page('registrations'),page('activity_score_baselines'),page('guild_membership_proofs'),page('viewer_login_intents'),
    db.prepare(`DELETE FROM oauth_states WHERE state_hash IN (SELECT state_hash FROM viewer_oauth_context WHERE activity_id=? AND owner_id=? ORDER BY rowid LIMIT 100) AND ${fence}`).bind(id,owner,id,owner),

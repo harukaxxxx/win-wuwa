@@ -1,0 +1,200 @@
+{
+  "generated_at": "2026-11-09T16:10:32.648Z",
+  "synthetic": true,
+  "scenario": {
+    "owners": 5,
+    "registrations_per_owner": 500,
+    "historical_absent_per_owner": 1101,
+    "draws_per_owner": 20
+  },
+  "requests": 2615,
+  "stages": {
+    "register": {
+      "requests": 2500,
+      "rows_read": 26990,
+      "rows_written": 10000,
+      "statements": 5000,
+      "elapsed_ms": 209706.80000000034,
+      "max_ms": 108.72
+    },
+    "draw": {
+      "requests": 100,
+      "rows_read": 348650,
+      "rows_written": 98900,
+      "statements": 1000,
+      "elapsed_ms": 2129.4000000000005,
+      "max_ms": 35.97
+    },
+    "settle": {
+      "requests": 10,
+      "rows_read": 3993291,
+      "rows_written": 8035,
+      "statements": 585,
+      "elapsed_ms": 1079.1599999999999,
+      "max_ms": 145.76
+    },
+    "history": {
+      "requests": 5,
+      "rows_read": 30,
+      "rows_written": 0,
+      "statements": 10,
+      "elapsed_ms": 42.05,
+      "max_ms": 8.61
+    }
+  },
+  "tableCounts": {
+    "viewer_scores": 8005,
+    "registrations": 2500,
+    "draws": 100,
+    "draw_candidates": 49050,
+    "activity_settlements": 5
+  },
+  "indexes": [
+    {
+      "name": "one_unfinished_activity_per_owner",
+      "tbl_name": "activities",
+      "sql": "CREATE UNIQUE INDEX one_unfinished_activity_per_owner ON activities(owner_id) WHERE status IN ('initializing','open','paused','settling','cancelling')"
+    },
+    {
+      "name": "sqlite_autoindex_activities_1",
+      "tbl_name": "activities",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_activities_2",
+      "tbl_name": "activities",
+      "sql": null
+    },
+    {
+      "name": "retention_cancellation_completed",
+      "tbl_name": "activity_cancellations",
+      "sql": "CREATE INDEX retention_cancellation_completed ON activity_cancellations(owner_id,completed_at)"
+    },
+    {
+      "name": "sqlite_autoindex_activity_cancellations_1",
+      "tbl_name": "activity_cancellations",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_activity_defaults_1",
+      "tbl_name": "activity_defaults",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_activity_opening_generations_1",
+      "tbl_name": "activity_opening_generations",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_activity_score_baselines_1",
+      "tbl_name": "activity_score_baselines",
+      "sql": null
+    },
+    {
+      "name": "retention_settlement_completed",
+      "tbl_name": "activity_settlements",
+      "sql": "CREATE INDEX retention_settlement_completed ON activity_settlements(owner_id,completed_at)"
+    },
+    {
+      "name": "sqlite_autoindex_activity_settlements_1",
+      "tbl_name": "activity_settlements",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_activity_tombstones_1",
+      "tbl_name": "activity_tombstones",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_approved_streamers_1",
+      "tbl_name": "approved_streamers",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_discord_identities_1",
+      "tbl_name": "discord_identities",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_draw_candidates_1",
+      "tbl_name": "draw_candidates",
+      "sql": null
+    },
+    {
+      "name": "cancellation_winner_cursor",
+      "tbl_name": "draws",
+      "sql": "CREATE INDEX cancellation_winner_cursor ON draws(activity_id,owner_id,winner_id)"
+    },
+    {
+      "name": "sqlite_autoindex_draws_1",
+      "tbl_name": "draws",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_draws_2",
+      "tbl_name": "draws",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_draws_3",
+      "tbl_name": "draws",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_environments_1",
+      "tbl_name": "environments",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_guild_membership_proofs_1",
+      "tbl_name": "guild_membership_proofs",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_oauth_states_1",
+      "tbl_name": "oauth_states",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_registrations_1",
+      "tbl_name": "registrations",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_registrations_2",
+      "tbl_name": "registrations",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_session_display_names_1",
+      "tbl_name": "session_display_names",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_sessions_1",
+      "tbl_name": "sessions",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_viewer_login_intents_1",
+      "tbl_name": "viewer_login_intents",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_viewer_oauth_context_1",
+      "tbl_name": "viewer_oauth_context",
+      "sql": null
+    },
+    {
+      "name": "sqlite_autoindex_viewer_scores_1",
+      "tbl_name": "viewer_scores",
+      "sql": null
+    }
+  ],
+  "sqlite": {
+    "size_after": 7774208,
+    "dbstat": {
+      "unavailable": "Error: D1_ERROR: no such table: dbstat: SQLITE_ERROR"
+    }
+  }
+}
