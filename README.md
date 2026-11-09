@@ -6,7 +6,7 @@
 - [領域詞彙](CONTEXT.md)
 - 已確認的取捨：[主播環境隔離](docs/adr/0001-streamer-isolation.md)、[取消的分數補償](docs/adr/0002-cancellation-compensation.md)。
 
-目前有 issue #8 **隔離合成資料**原型、#9 資格管理、#10 本機開場、#11 本機觀眾入口與報名，以及 #12 合成群資格切片；抽選、結算、取消恢復及正式部署均未完成。登入不授予主播資格；本機測試資料中的核准不決定正式管理政策。見 [issue #8 證據](docs/issue-8-evidence.md)、[issue #10 證據](docs/issue-10-evidence.md)、[issue #11 證據](docs/issue-11-evidence.md)、[issue #12 證據與真供應商限制](docs/issue-12-evidence.md)。
+目前有 issue #8 **隔離合成資料**原型、#9 資格管理、#10 本機開場、#11 本機觀眾入口與報名、#12 合成群資格，以及 #13 本機暫停／恢復及本人退出切片；抽選、結算、取消恢復及正式部署均未完成。登入不授予主播資格；本機測試資料中的核准不決定正式管理政策。見 [issue #8 證據](docs/issue-8-evidence.md)、[issue #10 證據](docs/issue-10-evidence.md)、[issue #11 證據](docs/issue-11-evidence.md)、[issue #12 證據與真供應商限制](docs/issue-12-evidence.md)、[issue #13 證據與缺口](docs/issue-13-evidence.md)。
 
 ## Issue #12 合成群資格（真供應商未驗收）
 
@@ -38,7 +38,7 @@ npm run dev -- --port 19387
 
 ## Issue #11 觀眾報名合成瀏覽器驗收
 
-本機新 migrations 0007–0010 必須先套用。主播登入後可取得 `/s/<主播 Discord ID>` 固定入口；觀眾只看到公開場次與自己的報名。OAuth 返回仍須本人按確認；限制群資格的合成驗證見 #12，真供應商仍待驗收。隱私保留政策已顯示，但自動清理尚未實作，亦未完成法律審查。請勿部署或使用真帳號。
+本機新 migrations 0007–0011 必須先套用。主播登入後可取得 `/s/<主播 Discord ID>` 固定入口；觀眾只看到公開場次與自己的報名。OAuth 返回仍須本人按確認；限制群資格的合成驗證見 #12，真供應商仍待驗收。隱私保留政策已顯示，但自動清理尚未實作，亦未完成法律審查。請勿部署或使用真帳號。
 
 以獨立 loopback fixture 測試（不啟用原 19481 LAN preview）：
 

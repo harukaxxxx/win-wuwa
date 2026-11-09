@@ -1,0 +1,77 @@
+import {test,after} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile,readdir} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
+const origin='http://127.0.0.1:19613';
+const mf=new Miniflare(convertV4MiniflareOptions({port:19613,host:'127.0.0.1',modules:true,scriptPath:'dist/index.js',compatibilityDate:'2026-07-30',d1Databases:['DB'],bindings:{ORIGIN:origin,ADMIN_DISCORD_ID:'999'}}));
+const db=await mf.getD1Database('DB');
+for(const file of (await readdir('migrations')).sort())for(const sql of (await readFile('migrations/'+file,'utf8')).split(';').map(s=>s.trim()).filter(Boolean))await db.prepare(sql).run();
+const hash=x=>createHash('sha256').update(x).digest('hex');
+async function identity(id,token){const sid=token.repeat(64),csrf='f'.repeat(64);await db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').bind(hash(sid),id,hash(csrf),Math.floor(Date.now()/1000)+300).run();return {Cookie:`__Host-session=${sid}; __Host-csrf=${csrf}`,Origin:origin,'X-CSRF-Token':csrf,'Content-Type':'application/json'};}
+const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+await db.prepare("INSERT INTO approved_streamers(user_id) VALUES ('200')").run();
+await db.prepare("INSERT INTO activities(id,owner_id,status,rule_version,guild_id,created_at) VALUES (?,'200','open',1,NULL,1)").bind(id).run();
+const owner=await identity('200','a'),viewer=await identity('300','b'),other=await identity('301','c');
+const req=(path,h,method='GET',body)=>mf.dispatchFetch(origin+path,{method,headers:h,body:body===undefined?undefined:JSON.stringify(body)});
+const body={activity_id:id,rule_version:1};
+const register=h=>req('/api/viewer/200/register',h,'POST',body);
+const toggle=(status,version,h=owner)=>req(`/api/activities/${id}/status`,h,'PUT',{status,rule_version:1,version});
+const withdraw=h=>req('/api/viewer/200/withdraw',h,'POST',body);
+await db.prepare("INSERT INTO viewer_scores VALUES ('200','300',7)").run();
+test('pause keeps existing retry, resume and permanent self withdrawal',async()=>{
+ assert.equal((await register(viewer)).status,200);
+ assert.equal((await toggle('paused',0)).status,200);
+ assert.equal((await register(other)).status,409);
+ assert.deepEqual(await (await register(viewer)).json(),{ordinal:1,status:'registered'});
+ assert.equal((await toggle('open',1)).status,200);
+ assert.equal((await register(other)).status,200);
+ assert.equal((await withdraw(viewer)).status,200);
+ assert.equal((await withdraw(viewer)).status,200);
+ assert.equal((await register(viewer)).status,409);
+ assert.deepEqual(await (await req(`/api/viewer/200/self?activity_id=${id}&rule_version=1`,viewer)).json(),{ordinal:1,status:'withdrawn'});
+ assert.equal((await (await req('/api/viewer/200',viewer)).json()).activity.count,1);
+ assert.equal((await db.prepare("SELECT score FROM viewer_scores WHERE owner_id='200' AND viewer_id='300'").first()).score,7);
+});
+test('authorization, optimistic version, terminal and paused withdrawal',async()=>{
+ assert.equal((await toggle('paused',2,other)).status,409);
+ assert.equal((await toggle('paused',0)).status,409);
+ assert.equal((await toggle('paused',2,{...owner,Origin:'https://evil.example'})).status,403);
+ assert.equal((await withdraw({...other,Origin:'https://evil.example'})).status,403);
+ assert.equal((await req('/api/viewer/200/withdraw',owner,'POST',{...body,viewer_id:'301'})).status,400);
+ await db.prepare("UPDATE approved_streamers SET status='disabled' WHERE user_id='200'").run();
+ assert.equal((await toggle('paused',2)).status,409);assert.equal((await withdraw(other)).status,409);
+ await db.prepare("UPDATE approved_streamers SET status='approved' WHERE user_id='200'").run();
+ assert.equal((await toggle('paused',2)).status,200);
+ assert.equal((await withdraw(other)).status,200);
+ assert.equal((await register(other)).status,409);
+ await db.prepare("UPDATE activities SET status='cancelled' WHERE id=?").bind(id).run();
+ assert.equal((await toggle('open',3)).status,409);
+});
+test('HTTP pause and registration serialize; withdrawal races pause',async()=>{
+ const activity='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ await db.prepare("INSERT INTO approved_streamers(user_id) VALUES ('201')").run();
+ await db.prepare("INSERT INTO activities(id,owner_id,status,rule_version,guild_id,created_at) VALUES (?,'201','open',1,NULL,1)").bind(activity).run();
+ const host=await identity('201','d'),participant=await identity('302','e');
+ const url=await mf.ready;
+ const send=(path,h,method,payload)=>fetch(new URL(path,url),{method,headers:h,body:JSON.stringify(payload)});
+ const [pause,registration]=await Promise.all([send(`/api/activities/${activity}/status`,host,'PUT',{status:'paused',rule_version:1,version:0}),send('/api/viewer/201/register',participant,'POST',{activity_id:activity,rule_version:1})]);
+ assert.equal(pause.status,200);assert.ok([200,409].includes(registration.status));
+ let rows=await db.prepare('SELECT status,ordinal FROM registrations WHERE activity_id=?').bind(activity).all();
+ assert.deepEqual(rows.results,registration.status===200?[{status:'registered',ordinal:1}]:[]);
+ if(registration.status===409){assert.equal((await send(`/api/activities/${activity}/status`,host,'PUT',{status:'open',rule_version:1,version:1})).status,200);assert.equal((await send('/api/viewer/201/register',participant,'POST',{activity_id:activity,rule_version:1})).status,200);}
+ else assert.equal((await send(`/api/activities/${activity}/status`,host,'PUT',{status:'open',rule_version:1,version:1})).status,200);
+ const [p,w]=await Promise.all([send(`/api/activities/${activity}/status`,host,'PUT',{status:'paused',rule_version:1,version:2}),send('/api/viewer/201/withdraw',participant,'POST',{activity_id:activity,rule_version:1})]);
+ assert.equal(p.status,200);assert.equal(w.status,200);
+ rows=await db.prepare('SELECT status,ordinal FROM registrations WHERE activity_id=?').bind(activity).all();assert.deepEqual(rows.results,[{status:'withdrawn',ordinal:1}]);
+});
+test('concurrent resume CAS changes only exact target once',async()=>{
+ const activity='cccccccc-cccc-4ccc-8ccc-cccccccccccc', sibling='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+ await db.prepare("INSERT INTO approved_streamers(user_id) VALUES ('202'),('203')").run();
+ await db.prepare("INSERT INTO activities(id,owner_id,status,rule_version,guild_id,created_at) VALUES (?,'202','paused',1,NULL,1),(?,'203','paused',1,NULL,2)").bind(activity,sibling).run();
+ const host=await identity('202','1'); const url=await mf.ready;
+ const send=()=>fetch(new URL(`/api/activities/${activity}/status`,url),{method:'PUT',headers:host,body:JSON.stringify({status:'open',rule_version:1,version:0})});
+ const outcomes=await Promise.all([send(),send()]);assert.deepEqual(outcomes.map(r=>r.status).sort(),[200,409]);
+ assert.deepEqual((await db.prepare('SELECT id,status,status_version FROM activities WHERE id IN (?,?) ORDER BY id').bind(activity,sibling).all()).results,[{id:activity,status:'open',status_version:1},{id:sibling,status:'paused',status_version:0}]);
+});
+after(()=>mf.dispose());

@@ -116,12 +116,25 @@ async function handler(req: Request, env: Env): Promise<Response> {
    const row=await env.DB.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) SELECT a.id,a.owner_id,?,COALESCE((SELECT MAX(ordinal) FROM registrations WHERE activity_id=a.id),0)+1 FROM activities a JOIN approved_streamers s ON s.user_id=a.owner_id JOIN sessions se ON se.session_hash=? AND se.user_id=? AND se.expires>? WHERE a.id=? AND a.owner_id=? AND a.rule_version=? AND a.status='open' AND s.status='approved' AND (a.guild_id IS NULL OR EXISTS (SELECT 1 FROM guild_membership_proofs p WHERE p.session_hash=se.session_hash AND p.user_id=se.user_id AND p.owner_id=a.owner_id AND p.activity_id=a.id AND p.rule_version=a.rule_version AND p.guild_id=a.guild_id AND p.status='member' AND p.expires>?)) ON CONFLICT(activity_id,viewer_id) DO NOTHING RETURNING ordinal,status").bind(s.user_id,sidHash,s.user_id,now(),id,owner,b.rule_version,now()).first();
    if(row)return json(row);
    const state=await env.DB.prepare("SELECT a.status,a.guild_id,s.status AS owner_status FROM activities a JOIN approved_streamers s ON s.user_id=a.owner_id WHERE a.id=? AND a.owner_id=? AND a.rule_version=?").bind(id,owner,b.rule_version).first<{status:string;guild_id:string|null;owner_status:string}>();
-   if(!state || state.status!=='open')return json({error:'stale activity or rules'},409);
+   if(!state || !['open','paused'].includes(state.status))return json({error:'stale activity or rules'},409);
    if(state.owner_status!=='approved')return json({error:'streamer disabled'},403);
    const existing=await env.DB.prepare('SELECT ordinal,status FROM registrations WHERE activity_id=? AND owner_id=? AND viewer_id=?').bind(id,owner,s.user_id).first();
-   if(existing)return json(existing);
+   if(existing && existing.status==='registered')return json(existing);
+   if(existing || state.status!=='open')return json({error:'registration unavailable'},409);
    if(state.guild_id!==null)return json({error:'需要有效的群資格驗證'},403);
    return existing ? json(existing) : json({error:'conflict'},409);
+  }
+  const withdrawal=u.pathname.match(/^\/api\/viewer\/(\d{1,32})\/withdraw$/);
+  if(withdrawal && req.method==='POST') {
+   if(u.search)return json({error:'invalid query'},400);
+   let value:unknown;try{value=await req.json();}catch{return json({error:'invalid'},400);}
+   if(!value || typeof value!=='object' || Array.isArray(value))return json({error:'invalid'},400);
+   const b=value as Record<string,unknown>;
+   if(Object.keys(b).sort().join(',')!=='activity_id,rule_version' || typeof b.activity_id!=='string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(b.activity_id) || !Number.isSafeInteger(b.rule_version))return json({error:'invalid'},400);
+   const row=await env.DB.prepare("UPDATE registrations SET status='withdrawn' WHERE activity_id=? AND owner_id=? AND viewer_id=? AND status='registered' AND EXISTS (SELECT 1 FROM activities a JOIN approved_streamers s ON s.user_id=a.owner_id JOIN sessions se ON se.user_id=? AND se.session_hash=? AND se.expires>? WHERE a.id=registrations.activity_id AND a.owner_id=registrations.owner_id AND a.rule_version=? AND a.status IN ('open','paused') AND s.status='approved') RETURNING ordinal,status").bind(b.activity_id,withdrawal[1],s.user_id,s.user_id,await hash(cookie(req,'__Host-session')),now(),b.rule_version).first();
+   if(row)return json(row);
+   const existing=await env.DB.prepare("SELECT r.ordinal,r.status FROM registrations r JOIN activities a ON a.id=r.activity_id AND a.owner_id=r.owner_id JOIN approved_streamers s ON s.user_id=a.owner_id WHERE r.activity_id=? AND r.owner_id=? AND r.viewer_id=? AND r.status='withdrawn' AND a.rule_version=? AND a.status IN ('open','paused') AND s.status='approved'").bind(b.activity_id,withdrawal[1],s.user_id,b.rule_version).first();
+   return existing?json(existing):json({error:'withdrawal unavailable'},409);
   }
   if (u.pathname.startsWith('/api/admin/')) {
    if (!admin) return json({error:'forbidden'},403);
@@ -158,8 +171,20 @@ async function handler(req: Request, env: Env): Promise<Response> {
   }
   if (u.pathname === '/api/activities/current' && req.method==='GET') {
    if(u.search) return json({error:'invalid query'},400);
-   const state=await env.DB.prepare("SELECT COALESCE((SELECT generation FROM activity_opening_generations WHERE owner_id=?),0) AS opening_generation, (SELECT json_object('id',id,'status',status,'rule_version',rule_version,'guild_id',guild_id,'guild_invite_url',guild_invite_url,'created_at',created_at,'expected_generation',expected_generation) FROM activities WHERE owner_id=? AND status IN ('initializing','open','paused','settling','cancelling')) AS activity").bind(s.user_id,s.user_id).first<{opening_generation:number;activity:string|null}>();
+   const state=await env.DB.prepare("SELECT COALESCE((SELECT generation FROM activity_opening_generations WHERE owner_id=?),0) AS opening_generation, (SELECT json_object('id',id,'status',status,'status_version',status_version,'rule_version',rule_version,'guild_id',guild_id,'guild_invite_url',guild_invite_url,'created_at',created_at,'expected_generation',expected_generation) FROM activities WHERE owner_id=? AND status IN ('initializing','open','paused','settling','cancelling')) AS activity").bind(s.user_id,s.user_id).first<{opening_generation:number;activity:string|null}>();
    return json({activity:state?.activity ? JSON.parse(state.activity) : null,opening_generation:state?.opening_generation ?? 0});
+  }
+  const statusMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})\/status$/);
+  if(statusMatch && req.method==='GET') {if(u.search)return json({error:'invalid query'},400);const row=await env.DB.prepare('SELECT id,status,status_version,rule_version FROM activities WHERE id=? AND owner_id=?').bind(statusMatch[1],s.user_id).first();return row?json(row):json({error:'not found'},404);}
+  if(statusMatch && req.method==='PUT') {
+   if(u.search)return json({error:'invalid query'},400);
+   let value:unknown;try{value=await req.json();}catch{return json({error:'invalid'},400);}
+   if(!value || typeof value!=='object' || Array.isArray(value))return json({error:'invalid'},400);
+   const b=value as Record<string,unknown>;
+   if(Object.keys(b).sort().join(',')!=='rule_version,status,version' || !['open','paused'].includes(b.status as string) || !Number.isSafeInteger(b.rule_version) || !Number.isSafeInteger(b.version) || (b.version as number)<0 || (b.version as number)>=Number.MAX_SAFE_INTEGER)return json({error:'invalid'},400);
+   const previous=b.status==='open'?'paused':'open';
+   const row=await env.DB.prepare("UPDATE activities SET status=?,status_version=status_version+1 WHERE id=? AND owner_id=? AND rule_version=? AND status_version=? AND status=? AND EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') AND EXISTS (SELECT 1 FROM sessions WHERE session_hash=? AND user_id=? AND expires>?) RETURNING id,status,status_version,rule_version").bind(b.status,statusMatch[1],s.user_id,b.rule_version,b.version,previous,s.user_id,await hash(cookie(req,'__Host-session')),s.user_id,now()).first();
+   return row?json(row):json({error:'conflict'},409);
   }
   const activityMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/);
   if(activityMatch && req.method==='PUT') {
