@@ -1,0 +1,56 @@
+{
+  "synthetic": true,
+  "provider": "synthetic OAuth; not real Discord",
+  "receipts": [
+    {
+      "port": 19831,
+      "expected": "群暱稱 300",
+      "metrics": {
+        "innerWidth": 390,
+        "clientWidth": 390,
+        "scrollWidth": 390
+      },
+      "chance": "狀態：已報名 · 序號 1 · 分數 0 · 目前單抽機率 100.00%。候選資料更新時間 2026/11/9 下午9:41:09 · 資料版本 1；名單變動會改變機率，並非整場中獎保證。",
+      "contact": {
+        "link": "https://discord.com/users/300",
+        "fields": [
+          "300",
+          "fixture_300"
+        ]
+      },
+      "public": {
+        "winners": [
+          {
+            "display_name": "群暱稱 300"
+          }
+        ],
+        "next_cursor": null
+      }
+    },
+    {
+      "port": 19832,
+      "expected": "f***0",
+      "metrics": {
+        "innerWidth": 390,
+        "clientWidth": 390,
+        "scrollWidth": 390
+      },
+      "chance": "狀態：已報名 · 序號 1 · 分數 0 · 目前單抽機率 100.00%。候選資料更新時間 2026/11/9 下午9:41:19 · 資料版本 1；名單變動會改變機率，並非整場中獎保證。",
+      "contact": {
+        "link": "https://discord.com/users/300",
+        "fields": [
+          "300",
+          "fixture_300"
+        ]
+      },
+      "public": {
+        "winners": [
+          {
+            "display_name": "f***0"
+          }
+        ],
+        "next_cursor": null
+      }
+    }
+  ]
+}

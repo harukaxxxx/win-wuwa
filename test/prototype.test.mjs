@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { Miniflare, convertV4MiniflareOptions, Log, LogLevel } from 'miniflare';
 const origin='http://localhost';
@@ -20,12 +20,12 @@ const options=convertV4MiniflareOptions({modules:true,scriptPath:'dist/index.js'
  if(providerMode==='user-malformed' && url.pathname.endsWith('/@me')) return new Response('fixture-token not json');
  if(providerMode==='invalid-user' && url.pathname.endsWith('/@me')) return Response.json({id:'invalid'});
  if(url.href==='https://discord.com/api/oauth2/token') return Response.json({access_token:'fixture-token',token_type:'Bearer',refresh_token:'fixture-refresh',scope:'identify'});
- if(url.href==='https://discord.com/api/users/@me') return Response.json({id:'123'});
+ if(url.href==='https://discord.com/api/users/@me') return Response.json({id:'123',global_name:'Fixture display',username:'fixture-private',email:'must-not-store@example.invalid'});
  return new Response('blocked',{status:500});
 }});
 const mf=new Miniflare({...options,log,handleStructuredLogs:entry=>logs.push(JSON.stringify(entry))});
 const db=await mf.getD1Database('DB');
-for(const file of ['migrations/0001_init.sql','migrations/0002_login_budget.sql','migrations/0003_streamer_status.sql']) for(const sql of (await readFile(file,'utf8')).split(';').map(x=>x.trim()).filter(Boolean)) await db.prepare(sql).run();
+for(const file of (await readdir('migrations')).sort().map(x=>'migrations/'+x)) for(const sql of (await readFile(file,'utf8')).split(/;\s*(?=(?:CREATE|ALTER|INSERT|UPDATE|DROP|$))/i).map(x=>x.trim()).filter(Boolean)) await db.prepare(sql).run();
 const fetcher=(path,opts={})=>mf.dispatchFetch(origin+path,{redirect:'manual',...opts});
 const cookieString=r=>r.headers.getSetCookie().map(x=>x.split(';')[0]).join('; ');
 let sessionCookie,csrf;
@@ -40,6 +40,7 @@ test('OAuth state, PKCE, secure cookies, replay and no secret exposure',async()=
  for(const c of res.headers.getSetCookie()) assert.match(c,/Secure; HttpOnly; SameSite=Lax/);
  sessionCookie=cookieString(res); const text=JSON.stringify([...res.headers]); assert(!text.includes(secret)); assert(!text.includes('fixture-token')); assert.equal((await fetcher(callback,{headers:{Cookie:oauth}})).status,400);
  const info=await fetcher('/api/session',{headers:{Cookie:sessionCookie}}); const data=await info.json(); csrf=data.csrf; assert.equal(data.approved,false); assert.equal((await fetcher('/api/environment',{headers:{Cookie:sessionCookie}})).status,403);
+ assert.deepEqual(await db.prepare('SELECT * FROM discord_identities WHERE user_id=?').bind('123').first(),{user_id:'123',display_name:'Fixture display',username:'fixture-private'});
 });
 test('owner-only environment, csrf and concurrent CAS',async()=>{
  await db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind('123').run();

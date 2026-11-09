@@ -6,7 +6,7 @@ import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 const origin='http://127.0.0.1:19613';
 const mf=new Miniflare(convertV4MiniflareOptions({port:19613,host:'127.0.0.1',modules:true,scriptPath:'dist/index.js',compatibilityDate:'2026-07-30',d1Databases:['DB'],bindings:{ORIGIN:origin,ADMIN_DISCORD_ID:'999'}}));
 const db=await mf.getD1Database('DB');
-for(const file of (await readdir('migrations')).sort())for(const sql of (await readFile('migrations/'+file,'utf8')).split(';').map(s=>s.trim()).filter(Boolean))await db.prepare(sql).run();
+for(const file of (await readdir('migrations')).sort())for(const sql of (await readFile('migrations/'+file,'utf8')).split(/;\s*(?=(?:CREATE|ALTER|INSERT|UPDATE|DROP|$))/i).map(s=>s.trim()).filter(Boolean))await db.prepare(sql).run();
 const hash=x=>createHash('sha256').update(x).digest('hex');
 async function identity(id,token){const sid=token.repeat(64),csrf='f'.repeat(64);await db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').bind(hash(sid),id,hash(csrf),Math.floor(Date.now()/1000)+300).run();return {Cookie:`__Host-session=${sid}; __Host-csrf=${csrf}`,Origin:origin,'X-CSRF-Token':csrf,'Content-Type':'application/json'};}
 const id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';

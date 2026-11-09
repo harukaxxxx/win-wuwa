@@ -12,7 +12,7 @@ test('commit-boundary candidate, score, disable and failure interleavings',async
  execFileSync('node_modules/.bin/esbuild',['test/draw-interleave-worker.mjs','--bundle','--format=esm','--platform=browser',`--outfile=${dir}/worker.js`],{stdio:'pipe'});
  const mf=new Miniflare(convertV4MiniflareOptions({port:19644,host:'127.0.0.1',modules:true,script:await readFile(`${dir}/worker.js`,'utf8'),compatibilityDate:'2026-07-30',d1Databases:['DB'],bindings:{ORIGIN:origin}}));
  try {
-  const db=await mf.getD1Database('DB');for(const f of (await readdir('migrations')).sort())for(const sql of (await readFile('migrations/'+f,'utf8')).split(';').map(x=>x.trim()).filter(Boolean))await db.prepare(sql).run();
+  const db=await mf.getD1Database('DB');for(const f of (await readdir('migrations')).sort())for(const sql of (await readFile('migrations/'+f,'utf8')).split(/;\s*(?=(?:CREATE|ALTER|INSERT|UPDATE|DROP|$))/i).map(x=>x.trim()).filter(Boolean))await db.prepare(sql).run();
   const hash=x=>createHash('sha256').update(x).digest('hex'),sid='a'.repeat(64),csrf='f'.repeat(64);
   await db.prepare("INSERT INTO approved_streamers(user_id) VALUES ('210')").run();
   await db.prepare("INSERT INTO activities(id,owner_id,status,rule_version,created_at) VALUES (?,'210','open',1,1)").bind(id).run();

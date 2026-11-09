@@ -1,0 +1,18 @@
+const assert=(await import('node:assert/strict')).default;
+const task=await taskSpace('wuwa16 isolated results contact');
+console.log('space',task.spaceId);
+const p=task.page('p1');
+await p.cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+await p.goto('http://localhost:19797/s/123');await p.waitForSelector('#login',{state:'visible'});
+let metrics=await p.evaluate(()=>({innerWidth,clientWidth:document.documentElement.clientWidth,scrollWidth:document.documentElement.scrollWidth}));assert.equal(metrics.innerWidth,390);assert.equal(metrics.clientWidth,390);assert.equal(metrics.scrollWidth,390);
+await p.click('#login');await p.waitForSelector('#register',{state:'visible'});await p.click('#register');await p.waitForFunction(()=>document.querySelector('#self').textContent.includes('序號'));
+await p.click('loc=role:button[name="更新本人機率"]');await p.waitForFunction(()=>document.body.textContent.includes('100.00%'));const viewer=await p.evaluate(()=>[...document.querySelectorAll('p')].find(x=>x.textContent.includes('目前單抽機率'))?.textContent);assert.ok(viewer.includes('非整場中獎保證'));
+await p.click('#logout-viewer');await p.waitForSelector('#login',{state:'visible'});assert.equal((await p.fetch('/__fixture/status',{method:'POST',body:'owner'})).status,200);
+await p.goto('http://localhost:19797/');await p.click('text=以 Discord 登入');await p.waitForSelector('loc=role:button[name="抽選"]',{state:'visible'});await p.click('loc=role:button[name="抽選"]');await p.waitForFunction(()=>document.querySelector('#draw-result').textContent.includes('中獎'));
+await p.click('text=本人場次名單與聯絡');await p.click('loc=role:button[name="讀取本人場次"]');await p.waitForSelector('loc=role:button[name*="aaaaaaaa"]',{state:'visible'});await p.click('loc=role:button[name*="aaaaaaaa"]');await p.waitForSelector('loc=role:button[name="複製username"]',{state:'visible'});
+const privateView=await p.evaluate(()=>({text:document.body.textContent,link:[...document.querySelectorAll('a')].find(x=>x.textContent==='開啟 Discord 聯絡')?.href,fields:[...document.querySelectorAll('input')].filter(x=>x.readOnly).map(x=>x.value)}));assert.equal(privateView.link,'https://discord.com/users/300');assert.ok(privateView.fields.includes('fixture_300'));
+await p.focus('loc=role:button[name="複製username"]');await p.keyboard.press('Enter');await p.waitForFunction(()=>document.body.textContent.includes('已複製')||document.body.textContent.includes('手動複製'));const copy=await p.evaluate(()=>[...document.querySelectorAll('[role=status]')].map(x=>x.textContent).find(x=>x.includes('複製')));
+await p.click('#logout');await p.waitForSelector('text=以 Discord 登入',{state:'visible'});await p.goto('http://localhost:19797/s/123');await p.waitForFunction(()=>document.body.textContent.includes('測試顯示 300'));const guest=await p.evaluate(()=>document.body.textContent);assert.ok(!guest.includes('fixture_300'));
+await p.goto('http://localhost:19797/s/999');await p.waitForFunction(()=>document.querySelector('#state').textContent.includes('目前沒有進行中的場次'));
+await p.screenshot({path:'/Users/haruka/.hermes/profiles/makino-futsuki/cache/scratch/issue16-verify/.tmp/empty-390.png'});
+console.log(JSON.stringify({result:'PASS',metrics,viewer,link:privateView.link,copy,publicWinner:true,empty:true}));await task.finish({keep:[]});

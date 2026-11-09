@@ -16,13 +16,13 @@ export async function draw(req:Request,db:D1Database,owner:string,sessionHash:st
   const snap=snapshot(rows), chosen=select(rows), token=crypto.randomUUID(), data=JSON.stringify(snap), time=Math.floor(Date.now()/1000);
   try {
    const result=await db.batch([
-    db.prepare(`INSERT INTO draws(id,activity_id,owner_id,request_key,rule_version,winner_id,winner_ordinal,created_at)
-     SELECT ?,a.id,a.owner_id,?,a.rule_version,?,?,? FROM activities a JOIN approved_streamers o ON o.user_id=a.owner_id
+    db.prepare(`INSERT INTO draws(id,activity_id,owner_id,request_key,rule_version,winner_id,winner_ordinal,created_at,winner_display_name)
+     SELECT ?,a.id,a.owner_id,?,a.rule_version,?,?,?,(SELECT display_name_snapshot FROM registrations WHERE activity_id=a.id AND owner_id=a.owner_id AND viewer_id=?) FROM activities a JOIN approved_streamers o ON o.user_id=a.owner_id
      WHERE a.id=? AND a.owner_id=? AND a.rule_version=1 AND a.status IN ('open','paused') AND o.status='approved'
      AND EXISTS (SELECT 1 FROM sessions WHERE session_hash=? AND user_id=a.owner_id AND expires>?)
      AND (SELECT COUNT(*) FROM registrations r WHERE r.activity_id=a.id AND r.status='registered')=json_array_length(?)
      AND NOT EXISTS (SELECT 1 FROM json_each(?) j LEFT JOIN registrations r ON r.activity_id=a.id AND r.owner_id=a.owner_id AND r.viewer_id=json_extract(j.value,'$.viewer_id') AND r.status='registered' LEFT JOIN viewer_scores s ON s.owner_id=r.owner_id AND s.viewer_id=r.viewer_id WHERE r.viewer_id IS NULL OR r.ordinal<>json_extract(j.value,'$.ordinal') OR COALESCE(s.score,0)<>json_extract(j.value,'$.score'))
-     ON CONFLICT(activity_id,request_key) DO NOTHING`).bind(token,key,chosen.viewer_id,chosen.ordinal,time,activity,owner,sessionHash,time,data,data),
+     ON CONFLICT(activity_id,request_key) DO NOTHING`).bind(token,key,chosen.viewer_id,chosen.ordinal,time,chosen.viewer_id,activity,owner,sessionHash,time,data,data),
     db.prepare("INSERT INTO draw_candidates(draw_id,viewer_id,ordinal,score,weight,probability) SELECT ?,json_extract(j.value,'$.viewer_id'),json_extract(j.value,'$.ordinal'),json_extract(j.value,'$.score'),json_extract(j.value,'$.weight'),json_extract(j.value,'$.probability') FROM json_each(?) j WHERE EXISTS (SELECT 1 FROM draws WHERE id=?)").bind(token,data,token),
     db.prepare("UPDATE registrations SET status='winner' WHERE activity_id=? AND owner_id=? AND viewer_id=? AND status='registered' AND EXISTS (SELECT 1 FROM draws WHERE id=?)").bind(activity,owner,chosen.viewer_id,token),
     db.prepare("INSERT INTO viewer_scores(owner_id,viewer_id,score) SELECT ?,?,0 WHERE EXISTS (SELECT 1 FROM draws WHERE id=?) ON CONFLICT(owner_id,viewer_id) DO UPDATE SET score=0").bind(owner,chosen.viewer_id,token)

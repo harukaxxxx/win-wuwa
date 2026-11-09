@@ -4,7 +4,7 @@ import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 const origin='http://localhost', id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const mf=new Miniflare(convertV4MiniflareOptions({modules:true,scriptPath:'dist/index.js',compatibilityDate:'2026-07-30',d1Databases:['DB'],bindings:{ORIGIN:origin,DISCORD_CLIENT_ID:'client',DISCORD_CLIENT_SECRET:'secret'},outboundService:async req=>new URL(req.url).pathname.endsWith('/token')?Response.json({access_token:'token',token_type:'Bearer',scope:'identify'}):Response.json({id:'300'})}));
-const db=await mf.getD1Database('DB');for(const f of (await readdir('migrations')).sort())for(const s of (await readFile('migrations/'+f,'utf8')).split(';').map(s=>s.trim()).filter(Boolean))await db.prepare(s).run();
+const db=await mf.getD1Database('DB');for(const f of (await readdir('migrations')).sort())for(const s of (await readFile('migrations/'+f,'utf8')).split(/;\s*(?=(?:CREATE|ALTER|INSERT|UPDATE|DROP|$))/i).map(s=>s.trim()).filter(Boolean))await db.prepare(s).run();
 await db.prepare("INSERT INTO approved_streamers(user_id) VALUES ('123')").run();await db.prepare("INSERT INTO activities(id,owner_id,status,rule_version,guild_id,created_at) VALUES (?,'123','open',1,NULL,1)").bind(id).run();
 const req=(p,h={})=>mf.dispatchFetch(origin+p,{headers:h,redirect:'manual'});const cookies=r=>r.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ');
 const start=()=>req(`/auth/login?owner=123&activity_id=${id}&rule_version=1`);

@@ -1,5 +1,6 @@
 import {draw} from './draw';
 import {settle} from './settlement';
+import {publicResults,chance,roster,ownedActivities} from './results';
 interface Env { DB: D1Database; ASSETS: Fetcher; DISCORD_CLIENT_ID?: string; DISCORD_CLIENT_SECRET?: string; ADMIN_DISCORD_ID?: string; ORIGIN?: string }
 const headers = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
 const json = (x: unknown, status = 200) => Response.json(x, { status, headers });
@@ -17,7 +18,7 @@ function validMemberDate(value:unknown) {
  const d=new Date(Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3])));
  return d.getUTCFullYear()===Number(m[1]) && d.getUTCMonth()===Number(m[2])-1 && d.getUTCDate()===Number(m[3]);
 }
-function memberValid(value: unknown, userId: string): value is {pending?: boolean} {
+function memberValid(value: unknown, userId: string): value is {pending?: boolean; nick?: unknown} {
  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
  const b=value as Record<string,unknown>;
  if (!b.user || typeof b.user!=='object' || Array.isArray(b.user) || (b.user as {id?:unknown}).id!==userId) return false;
@@ -61,25 +62,31 @@ async function handler(req: Request, env: Env): Promise<Response> {
   if (!tokenResponse.ok) return json({error:'provider failed'},502);
   const token = await tokenResponse.json<{access_token?:string; token_type?:string;scope?:unknown}>(); if (typeof token.access_token!=='string' || !token.access_token || typeof token.token_type!=='string' || token.token_type.toLowerCase() !== 'bearer' || typeof token.scope!=='string' || !token.scope.split(' ').includes('identify') || (context?.guild_id && !token.scope.split(' ').includes('guilds.members.read'))) return json({error:'provider failed'},502);
   const userResponse = await fetch('https://discord.com/api/users/@me', {headers:{Authorization:`Bearer ${token.access_token}`}, redirect:'manual'}); if (!userResponse.ok) return json({error:'provider failed'},502);
-  const user = await userResponse.json<{id?:string}>(); if (!user || typeof user.id!=='string' || !/^\d{1,32}$(?![\s\S])/.test(user.id)) return json({error:'provider failed'},502);
+  const user = await userResponse.json<{id?:string;global_name?:unknown;username?:unknown}>(); if (!user || typeof user.id!=='string' || !/^\d{1,32}$(?![\s\S])/.test(user.id)) return json({error:'provider failed'},502);
   const sid=random(), csrf=random(); const admitted=await env.DB.prepare('INSERT INTO sessions SELECT ?,?,?,? WHERE (SELECT COUNT(*) FROM sessions)<1000 RETURNING session_hash').bind(await hash(sid),user.id,await hash(csrf),now()+28800).first(); if (!admitted) return json({error:'login capacity'},503);
+  const name=(x:unknown)=>typeof x==='string'&&x.trim().length>0&&x.length<=80?x:null;
+  const username=name(user.username), chars=username ? Array.from(username) : [];
+  const masked=chars.length ? chars[0]+'***'+(chars.length>=5 ? chars[chars.length-1] : '') : null;
+  await env.DB.batch([env.DB.prepare('INSERT INTO discord_identities(user_id,display_name,username) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET display_name=excluded.display_name,username=excluded.username').bind(user.id,name(user.global_name),username),env.DB.prepare('DELETE FROM session_display_names WHERE expires<=?').bind(now()),env.DB.prepare('INSERT INTO session_display_names(session_hash,user_id,global_name,masked_username,expires) VALUES (?,?,?,?,?)').bind(await hash(sid),user.id,name(user.global_name),masked,now()+28800)]);
   let destination='/'; if(context) {
    const sidHash=await hash(sid);
    if(context.guild_id) {
-    let status='providerfailure', retryAfter:number|null=null;
+    let status='providerfailure', retryAfter:number|null=null, nickname:string|null=null;
     try {
      const response=await fetch('https://discord.com/api/users/@me/guilds/'+context.guild_id+'/member',{headers:{Authorization:`Bearer ${token.access_token}`},redirect:'manual'});
      if(response.status===404) { const body=await response.json<{code?:unknown}>(); if(body && body.code===10007) status='nonmember'; }
      else if(response.status===401 || response.status===403) status='reauth';
      else if(response.status===429) { status='rate'; try { const body=await response.json<{retry_after?:unknown}>(); if(typeof body.retry_after==='number' && Number.isFinite(body.retry_after) && body.retry_after>=0) retryAfter=body.retry_after; } catch {} }
-     else if(response.ok) { const body:unknown=await response.json(); if(memberValid(body,user.id)) status=body.pending ? 'pending' : 'member'; }
+     else if(response.ok) { const body:unknown=await response.json(); if(memberValid(body,user.id)) { status=body.pending ? 'pending' : 'member'; if(status==='member') nickname=name(body.nick); } }
     } catch {}
-    await env.DB.batch([env.DB.prepare('DELETE FROM guild_membership_proofs WHERE expires<=?').bind(now()),env.DB.prepare('INSERT INTO guild_membership_proofs VALUES (?,?,?,?,?,?,?,?,?)').bind(sidHash,user.id,context.owner_id,context.activity_id,context.rule_version,context.guild_id,status,retryAfter,now()+300)]);
+    await env.DB.batch([env.DB.prepare('DELETE FROM guild_membership_proofs WHERE expires<=?').bind(now()),env.DB.prepare('INSERT INTO guild_membership_proofs (session_hash,user_id,owner_id,activity_id,rule_version,guild_id,status,retry_after,expires,nickname) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(sidHash,user.id,context.owner_id,context.activity_id,context.rule_version,context.guild_id,status,retryAfter,now()+300,nickname)]);
    }
    const intent=random(); await env.DB.prepare('INSERT INTO viewer_login_intents VALUES (?,?,?,?,?,?)').bind(await hash(intent),sidHash,context.owner_id,context.activity_id,context.rule_version,now()+1800).run(); destination='/s/'+context.owner_id+'?intent='+intent;
   }
   return redirect(destination,[setCookie('__Host-session',sid,28800),setCookie(context?'__Host-oauth-'+state:'__Host-oauth','',0),setCookie('__Host-csrf',csrf,28800)]);
  }
+ const publicWinners=u.pathname.match(/^\/api\/viewer\/(\d{1,32})\/results$/);
+ if(publicWinners && req.method==='GET')return publicResults(req,env.DB,publicWinners[1]);
  const viewerPublic=u.pathname.match(/^\/api\/viewer\/(\d{1,32})$/);
  if(viewerPublic && req.method==='GET') {
   if(u.search) return json({error:'invalid query'},400);
@@ -94,6 +101,11 @@ async function handler(req: Request, env: Env): Promise<Response> {
   if (u.pathname === '/api/logout' && req.method === 'POST') { await env.DB.prepare('DELETE FROM sessions WHERE session_hash=?').bind(await hash(cookie(req,'__Host-session'))).run(); const h=new Headers(headers); h.append('Set-Cookie',setCookie('__Host-session','',0)); h.append('Set-Cookie',setCookie('__Host-csrf','',0)); return new Response(null,{status:204,headers:h}); }
   const intent=u.pathname.match(/^\/api\/viewer-intent\/([a-f0-9]{64})$/);
   if(intent && req.method==='GET') { if(u.search)return json({error:'invalid query'},400); const row=await env.DB.prepare('SELECT owner_id,activity_id,rule_version FROM viewer_login_intents WHERE intent_hash=? AND session_hash=? AND expires>?').bind(await hash(intent[1]),await hash(cookie(req,'__Host-session')),now()).first(); return row ? json(row) : json({error:'invalid intent'},404); }
+  const selfChance=u.pathname.match(/^\/api\/viewer\/(\d{1,32})\/chance$/);
+  if(selfChance && req.method==='GET')return chance(req,env.DB,selfChance[1],s.user_id);
+  const rosterMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9-]{36})\/roster$/);
+  if(rosterMatch && req.method==='GET')return roster(req,env.DB,s.user_id,rosterMatch[1]);
+  if(u.pathname==='/api/activities/history' && req.method==='GET')return ownedActivities(req,env.DB,s.user_id);
   const self=u.pathname.match(/^\/api\/viewer\/(\d{1,32})\/self$/);
   if(self && req.method==='GET') {
    const params=[...u.searchParams];
@@ -115,7 +127,7 @@ async function handler(req: Request, env: Env): Promise<Response> {
    if(Object.keys(b).sort().join(',')!=='activity_id,rule_version' || typeof b.activity_id!=='string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(b.activity_id) || !Number.isSafeInteger(b.rule_version))return json({error:'invalid'},400);
    const owner=registration[1],id=b.activity_id;
    const sidHash=await hash(cookie(req,'__Host-session'));
-   const row=await env.DB.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) SELECT a.id,a.owner_id,?,COALESCE((SELECT MAX(ordinal) FROM registrations WHERE activity_id=a.id),0)+1 FROM activities a JOIN approved_streamers s ON s.user_id=a.owner_id JOIN sessions se ON se.session_hash=? AND se.user_id=? AND se.expires>? WHERE a.id=? AND a.owner_id=? AND a.rule_version=? AND a.status='open' AND s.status='approved' AND COALESCE((SELECT MAX(ordinal) FROM registrations WHERE activity_id=a.id),0)<9007199254740991 AND (a.guild_id IS NULL OR EXISTS (SELECT 1 FROM guild_membership_proofs p WHERE p.session_hash=se.session_hash AND p.user_id=se.user_id AND p.owner_id=a.owner_id AND p.activity_id=a.id AND p.rule_version=a.rule_version AND p.guild_id=a.guild_id AND p.status='member' AND p.expires>?)) ON CONFLICT(activity_id,viewer_id) DO NOTHING RETURNING ordinal,status").bind(s.user_id,sidHash,s.user_id,now(),id,owner,b.rule_version,now()).first();
+   const row=await env.DB.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal,display_name_snapshot,name_source) SELECT a.id,a.owner_id,?,COALESCE((SELECT MAX(ordinal) FROM registrations WHERE activity_id=a.id),0)+1,COALESCE(p.nickname,n.global_name,n.masked_username,'中獎者'),CASE WHEN p.nickname IS NOT NULL THEN 'nickname' WHEN n.global_name IS NOT NULL THEN 'global_name' WHEN n.masked_username IS NOT NULL THEN 'masked_username' ELSE 'fallback' END FROM activities a JOIN approved_streamers s ON s.user_id=a.owner_id JOIN sessions se ON se.session_hash=? AND se.user_id=? AND se.expires>? LEFT JOIN session_display_names n ON n.session_hash=se.session_hash AND n.user_id=se.user_id AND n.expires>unixepoch() LEFT JOIN guild_membership_proofs p ON p.session_hash=se.session_hash AND p.user_id=se.user_id AND p.owner_id=a.owner_id AND p.activity_id=a.id AND p.rule_version=a.rule_version AND p.guild_id=a.guild_id AND p.status='member' AND p.expires>unixepoch() WHERE a.id=? AND a.owner_id=? AND a.rule_version=? AND a.status='open' AND s.status='approved' AND COALESCE((SELECT MAX(ordinal) FROM registrations WHERE activity_id=a.id),0)<9007199254740991 AND (a.guild_id IS NULL OR p.session_hash IS NOT NULL) ON CONFLICT(activity_id,viewer_id) DO NOTHING RETURNING ordinal,status").bind(s.user_id,sidHash,s.user_id,now(),id,owner,b.rule_version).first();
    if(row)return json(row);
    const state=await env.DB.prepare("SELECT a.status,a.guild_id,s.status AS owner_status FROM activities a JOIN approved_streamers s ON s.user_id=a.owner_id WHERE a.id=? AND a.owner_id=? AND a.rule_version=?").bind(id,owner,b.rule_version).first<{status:string;guild_id:string|null;owner_status:string}>();
    if(!state || !['open','paused'].includes(state.status))return json({error:'stale activity or rules'},409);

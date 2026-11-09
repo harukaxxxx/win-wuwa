@@ -4,7 +4,7 @@ test('real D1 commit-boundary interleavings',async t=>{
  const dir=await mkdtemp(join(tmpdir(),'settlement-boundary-'));execFileSync('node_modules/.bin/esbuild',['test/settlement-interleave-worker.mjs','--bundle','--format=esm','--platform=browser',`--outfile=${dir}/worker.js`]);
  const origin='http://127.0.0.1:19771';const mf=new Miniflare(convertV4MiniflareOptions({port:19771,host:'127.0.0.1',modules:true,script:await readFile(`${dir}/worker.js`,'utf8'),compatibilityDate:'2026-07-30',d1Databases:['DB'],bindings:{ORIGIN:origin}}));
  try{
-  const db=await mf.getD1Database('DB');for(const f of (await readdir('migrations')).sort())for(const q of (await readFile('migrations/'+f,'utf8')).split(';').map(x=>x.trim()).filter(Boolean))await db.prepare(q).run();
+  const db=await mf.getD1Database('DB');for(const f of (await readdir('migrations')).sort())for(const q of (await readFile('migrations/'+f,'utf8')).split(/;\s*(?=(?:CREATE|ALTER|INSERT|UPDATE|DROP|$))/i).map(x=>x.trim()).filter(Boolean))await db.prepare(q).run();
   const hash=x=>createHash('sha256').update(x).digest('hex'),csrf='f'.repeat(64);async function session(id,c){const sid=c.repeat(64);await db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').bind(hash(sid),id,hash(csrf),Math.floor(Date.now()/1000)+3600).run();return `__Host-session=${sid}`;}
   const host=await session('250','a'),viewer=await session('400','b');await db.prepare("INSERT INTO approved_streamers(user_id) VALUES ('250')").run();
   const headers={Cookie:host,Origin:origin,'X-CSRF-Token':csrf,'Content-Type':'application/json','x-test-viewer':viewer};

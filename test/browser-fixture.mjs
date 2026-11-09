@@ -1,6 +1,6 @@
 // Test-only loopback proxy: never forwards requests to Discord or any other upstream.
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
@@ -14,12 +14,14 @@ const viewerQA = process.env.WUWA_VIEWER_QA === '1' && !lan;
 const statusQA = process.env.WUWA_STATUS_QA === '1' && viewerQA && managementQA && !lan;
 const drawQA = process.env.WUWA_DRAW_QA === '1' && statusQA;
 const settlementQA = process.env.WUWA_SETTLEMENT_QA === '1' && drawQA;
+const denyClipboardQA = process.env.WUWA_DENY_CLIPBOARD_QA === '1' && settlementQA && !lan;
 let dropSettlement=false,failSettlementRead=false;
 let dropDraw=false,failDrawRead=false;
 let dropStatus=false,failStatusRead=false,dropWithdraw=false,failWithdrawRead=false,failOldSelf=false;
 const statusCalls=[];
 let viewerIdentity='300', pauseAuth=false, dropRegistration=false, failViewerSelf=false, blockRegistration=false;
 const guildQA = process.env.WUWA_GUILD_QA === '1' && viewerQA && !lan;
+const nameQA = guildQA && ['nick','masked'].includes(process.env.WUWA_NAME_QA) ? process.env.WUWA_NAME_QA : null;
 let memberMode='member'; const outboundCalls=[], authorizationRequests=[], authorizationCodes=new Map();
 const origin = `http://${lan ? lan.address : 'localhost'}:${port}`;
 const assets = new Map([['/', ['public/index.html','text/html; charset=utf-8']], ['/viewer',['public/viewer.html','text/html; charset=utf-8']], ['/viewer.js',['public/viewer.js','text/javascript; charset=utf-8']], ['/app.js', ['public/app.js','text/javascript; charset=utf-8']], ['/style.css', ['public/style.css','text/css; charset=utf-8']]]);
@@ -31,6 +33,7 @@ const mf = new Miniflare(convertV4MiniflareOptions({
     if (!asset) return new Response('Not found', { status: 404 });
     let body = await readFile(asset[0]);
     if (lan && asset[0] === 'public/index.html') body = Buffer.from(body.toString().replace('<main>', '<main><p role="alert" style="font-weight:bold;color:#a00">區網合成測試・未加密・非真Discord，請勿輸入敏感資料</p>').replace('以 Discord 登入', '以測試帳號登入'));
+    if (denyClipboardQA && asset[0] === 'public/index.html') body = Buffer.from(body.toString().replace('<script src="/app.js"', '<script src="/__fixture/deny-clipboard.js"></script><script src="/app.js"'));
     return new Response(body, { headers: { 'content-type': asset[1] } });
   } },
   outboundService: async req => {
@@ -41,18 +44,19 @@ const mf = new Miniflare(convertV4MiniflareOptions({
       if(memberMode==='unknown-guild')return Response.json({code:10004},{status:404});
       if(memberMode==='rate')return Response.json({retry_after:30},{status:429});
       const id=(req.headers.get('Authorization')||'').replace('Bearer synthetic-','');
-      return Response.json({user:{id},roles:[],joined_at:'2020-01-02T03:04:05.000000+00:00',deaf:false,mute:false,flags:0,...(memberMode==='pending'?{pending:true}:{})});
+      return Response.json({user:{id},nick:'群暱稱 '+id,roles:[],joined_at:'2020-01-02T03:04:05.000000+00:00',deaf:false,mute:false,flags:0,...(memberMode==='pending'?{pending:true}:{})});
     }
     if (url.href === 'https://discord.com/api/oauth2/token' && req.method === 'POST') {const form=new URLSearchParams(await req.text()),code=form.get('code'),grant=authorizationCodes.get(code);if(!grant)return new Response('Unknown synthetic authorization code',{status:400});authorizationCodes.delete(code);return Response.json({ access_token: viewerQA ? 'synthetic-'+grant.identity : 'synthetic-token', token_type: 'Bearer', scope:grant.scope });}
-    if (url.href === 'https://discord.com/api/users/@me' && req.method === 'GET') return Response.json({ id: viewerQA ? (req.headers.get('Authorization')||'').replace('Bearer synthetic-','') : '123' });
+    if (url.href === 'https://discord.com/api/users/@me' && req.method === 'GET') {const id=viewerQA ? (req.headers.get('Authorization')||'').replace('Bearer synthetic-','') : '123';return Response.json({id,global_name:nameQA==='masked' && id==='300'?null:'測試顯示 '+id,username:'fixture_'+id});}
     return new Response('Blocked synthetic outbound', { status: 502 });
   }
 }));
 const db = await mf.getD1Database('DB');
-for (const file of ['migrations/0001_init.sql','migrations/0002_login_budget.sql','migrations/0003_streamer_status.sql','migrations/0004_activities.sql','migrations/0005_opening_generation.sql','migrations/0006_activity_defaults.sql',...(viewerQA?['migrations/0007_registrations.sql','migrations/0008_viewer_oauth.sql','migrations/0009_guild_proofs.sql']:[]),'migrations/0010_guild_invite.sql','migrations/0011_activity_status_version.sql',...(drawQA?['migrations/0012_draws.sql']:[]),...(settlementQA?['migrations/0013_settlement.sql']:[])]) {
-  for (const sql of (await readFile(file, 'utf8')).split(';').map(s => s.trim()).filter(Boolean)) await db.prepare(sql).run();
+for (const file of (await readdir('migrations')).sort().map(x=>'migrations/'+x)) {
+  for (const sql of (await readFile(file, 'utf8')).split(/;\s*(?=(?:CREATE|ALTER|INSERT|UPDATE|DROP|$))/i).map(s => s.trim()).filter(Boolean)) await db.prepare(sql).run();
 }
 await db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind('123').run();
+if(nameQA) await db.prepare("INSERT INTO activities(id,owner_id,status,rule_version,guild_id,created_at) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123','open',1,?,1)").bind(nameQA==='nick'?'42':null).run();
 if(viewerQA && !guildQA) await db.prepare("INSERT INTO activities(id,owner_id,status,rule_version,guild_id,created_at) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123','open',1,NULL,1)").run();
 if(managementQA) for(let i=10000;i<10105;i++) await db.prepare('INSERT INTO approved_streamers(user_id) VALUES (?)').bind(String(i)).run();
 let dropPut=false, failGet=false, blockPut=false, dropActivity=false, failCurrent=false, blockActivity=false;
@@ -61,6 +65,7 @@ const server = createServer(async (req, res) => {
     if (lan && (req.rawHeaders.filter((_, i) => i % 2 === 0 && req.rawHeaders[i].toLowerCase() === 'host').length !== 1 || !allowedLanRequest(lan, req.headers.host, req.socket.remoteAddress))) { res.writeHead(403); res.end('Forbidden'); return; }
     const url = new URL(req.url, origin);
     if (url.origin !== origin) { res.writeHead(403); res.end('Forbidden'); return; }
+    if (denyClipboardQA && url.pathname==='/__fixture/deny-clipboard.js' && req.method==='GET') { res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'});res.end("Object.defineProperty(navigator, 'clipboard', {value:{writeText:()=>Promise.reject(new DOMException('Synthetic denied', 'NotAllowedError'))},configurable:true});");return; }
     if(settlementQA && url.pathname==='/__fixture/settlement' && req.method==='POST'){const chunks=[];for await(const c of req)chunks.push(c);const mode=Buffer.concat(chunks).toString();if(mode==='fail-read'){failSettlementRead=true;}else if(mode==='force-settling'){const a=await db.prepare("SELECT id FROM activities WHERE owner_id='123' AND status='open'").first();if(!a)throw Error('no open fixture activity');await db.batch([db.prepare("UPDATE activities SET status='settling' WHERE id=?").bind(a.id),db.prepare("INSERT INTO activity_settlements(activity_id,owner_id,has_draw) VALUES (?,'123',0)").bind(a.id)]);}else if(mode==='seed'){await db.batch([db.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123','302',3)"),db.prepare("INSERT INTO viewer_scores(owner_id,viewer_id,score) VALUES ('123','300',3),('123','301',5),('123','302',6),('123','303',7)")]);}else if(mode==='large'){for(let start=0;start<1100;start+=100)await db.batch(Array.from({length:Math.min(100,1100-start)},(_,i)=>db.prepare('INSERT INTO viewer_scores(owner_id,viewer_id,score) VALUES (?, ?, 2)').bind('123','z'+String(start+i).padStart(4,'0'))));}else if(mode==='drop'){dropSettlement=true;failSettlementRead=true;}else {res.writeHead(400);res.end();return;}res.end('ok');return;}
     if(settlementQA && url.pathname==='/__fixture/settlement' && req.method==='GET'){const scores=await db.prepare('SELECT viewer_id,score FROM viewer_scores WHERE owner_id=? AND viewer_id IN (?,?,?,?) ORDER BY viewer_id').bind('123','300','301','302','303').all();const allScores=await db.prepare('SELECT viewer_id,score FROM viewer_scores WHERE owner_id=? ORDER BY viewer_id').bind('123').all();const scoreDigest=createHash('sha256').update(JSON.stringify(allScores.results)).digest('hex');const activities=await db.prepare('SELECT id,status FROM activities ORDER BY created_at').all();const regs=await db.prepare('SELECT viewer_id,status,ordinal FROM registrations ORDER BY ordinal').all();const journal=await db.prepare('SELECT activity_id,has_draw,cursor,completed_at FROM activity_settlements').all();res.setHeader('content-type','application/json');res.end(JSON.stringify({scores:scores.results,scoreCount:allScores.results.length,scoreDigest,activities:activities.results,registrations:regs.results,journal:journal.results,calls:statusCalls}));return;}
     if(drawQA && url.pathname==='/__fixture/draw' && req.method==='POST'){const chunks=[];for await(const c of req)chunks.push(c);const mode=Buffer.concat(chunks).toString();if(mode==='drop'){dropDraw=true;failDrawRead=true;}else if(mode==='seed')await db.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','123','301',2)").run();else {res.writeHead(400);res.end();return;}res.end('armed');return;}

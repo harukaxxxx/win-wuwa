@@ -11,7 +11,7 @@ const db=await mf.getD1Database('DB');
 const send=(method)=>mf.dispatchFetch(origin+path,{method,headers,body:method==='PUT'?JSON.stringify({rule_version:1}):undefined});
 try{
  if(mode==='commit'){
-  for(const f of (await readdir('migrations')).sort())for(const q of (await readFile('migrations/'+f,'utf8')).split(';').map(x=>x.trim()).filter(Boolean))await db.prepare(q).run();
+  for(const f of (await readdir('migrations')).sort())for(const q of (await readFile('migrations/'+f,'utf8')).split(/;\s*(?=(?:CREATE|ALTER|INSERT|UPDATE|DROP|$))/i).map(x=>x.trim()).filter(Boolean))await db.prepare(q).run();
   await db.prepare("INSERT INTO approved_streamers(user_id) VALUES ('220')").run();
   await db.prepare("INSERT INTO activities(id,owner_id,status,rule_version,created_at) VALUES (?,'220','paused',1,1)").bind(id).run();
   await db.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) VALUES (?,'220','800',1),(?,'220','801',2)").bind(id,id).run();
