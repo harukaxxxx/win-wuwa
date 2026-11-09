@@ -19,7 +19,7 @@ const options=convertV4MiniflareOptions({modules:true,scriptPath:'dist/index.js'
  if(providerMode==='invalid-token' && url.pathname.endsWith('/token')) return Response.json({access_token:'fixture-token',token_type:'invalid',refresh_token:'fixture-refresh'});
  if(providerMode==='user-malformed' && url.pathname.endsWith('/@me')) return new Response('fixture-token not json');
  if(providerMode==='invalid-user' && url.pathname.endsWith('/@me')) return Response.json({id:'invalid'});
- if(url.href==='https://discord.com/api/oauth2/token') return Response.json({access_token:'fixture-token',token_type:'Bearer',refresh_token:'fixture-refresh'});
+ if(url.href==='https://discord.com/api/oauth2/token') return Response.json({access_token:'fixture-token',token_type:'Bearer',refresh_token:'fixture-refresh',scope:'identify'});
  if(url.href==='https://discord.com/api/users/@me') return Response.json({id:'123'});
  return new Response('blocked',{status:500});
 }});

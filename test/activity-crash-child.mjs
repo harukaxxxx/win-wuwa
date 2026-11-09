@@ -9,7 +9,7 @@ const db=await mf.getD1Database('DB');
 const send=(path,method='GET',body)=>mf.dispatchFetch(origin+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
 try {
  if(mode==='commit'){
-  for(const f of ['migrations/0001_init.sql','migrations/0002_login_budget.sql','migrations/0003_streamer_status.sql','migrations/0004_activities.sql','migrations/0005_opening_generation.sql']) for(const q of (await readFile(f,'utf8')).split(';').map(x=>x.trim()).filter(Boolean)) await db.prepare(q).run();
+  for(const f of ['migrations/0001_init.sql','migrations/0002_login_budget.sql','migrations/0003_streamer_status.sql','migrations/0004_activities.sql','migrations/0005_opening_generation.sql','migrations/0006_activity_defaults.sql','migrations/0010_guild_invite.sql']) for(const q of (await readFile(f,'utf8')).split(';').map(x=>x.trim()).filter(Boolean)) await db.prepare(q).run();
   await db.prepare("INSERT INTO approved_streamers(user_id) VALUES ('10')").run();
   await db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').bind(hash(sid),'10',hash(csrf),Math.floor(Date.now()/1000)+300).run();
   for(const [viewer,score] of [['101',3],['102',10],['103',1]]) await db.prepare('INSERT INTO viewer_scores VALUES (?,?,?)').bind('10',viewer,score).run();

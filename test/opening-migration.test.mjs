@@ -17,5 +17,9 @@ test('generation migration preserves existing activities, baseline and owner his
   assert.deepEqual((await db.prepare('SELECT * FROM activity_score_baselines').all()).results,[{activity_id:'b',owner_id:'1',viewer_id:'viewer',score:7}]);
   assert.deepEqual((await db.prepare('SELECT * FROM activity_opening_generations').all()).results,[{owner_id:'1',generation:2}]);
   assert.deepEqual((await db.prepare('SELECT * FROM activity_defaults').all()).results,[]);
+  await db.prepare("INSERT INTO activity_defaults(owner_id,guild_id,version) VALUES ('1','123',2)").run();
+  await migrate('migrations/0010_guild_invite.sql');
+  assert.deepEqual((await db.prepare('SELECT id,guild_id,guild_invite_url FROM activities ORDER BY id').all()).results,[{id:'a',guild_id:'123',guild_invite_url:null},{id:'b',guild_id:null,guild_invite_url:null}]);
+  assert.deepEqual(await db.prepare('SELECT guild_id,guild_invite_url,version FROM activity_defaults WHERE owner_id=?').bind('1').first(),{guild_id:'123',guild_invite_url:null,version:2});
  } finally {await mf.dispose();}
 });

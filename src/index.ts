@@ -6,28 +6,44 @@ async function hash(s: string) { return Array.from(new Uint8Array(await crypto.s
 function cookie(req: Request, name: string) { return req.headers.get('Cookie')?.split(';').map(x => x.trim()).find(x => x.startsWith(name + '='))?.slice(name.length + 1) ?? ''; }
 const setCookie = (name: string, value: string, max: number) => `${name}=${value}; Path=/; Max-Age=${max}; Secure; HttpOnly; SameSite=Lax`;
 const now = () => Math.floor(Date.now() / 1000);
+const validInvite=(x:unknown)=>x===null || (typeof x==='string' && /^https:\/\/(?:discord\.gg\/[A-Za-z0-9_-]+|discord\.com\/invite\/[A-Za-z0-9_-]+)$(?![\s\S])/.test(x));
+function validMemberDate(value:unknown) {
+ if(value===null) return true;
+ if(typeof value!=='string') return false;
+ const m=value.match(/^(\d{4})-(\d\d)-(\d\d)T\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$(?![\s\S])/);
+ if(!m || !Number.isFinite(Date.parse(value))) return false;
+ const d=new Date(Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3])));
+ return d.getUTCFullYear()===Number(m[1]) && d.getUTCMonth()===Number(m[2])-1 && d.getUTCDate()===Number(m[3]);
+}
+function memberValid(value: unknown, userId: string): value is {pending?: boolean} {
+ if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+ const b=value as Record<string,unknown>;
+ if (!b.user || typeof b.user!=='object' || Array.isArray(b.user) || (b.user as {id?:unknown}).id!==userId) return false;
+ if (!Array.isArray(b.roles) || !b.roles.every(x=>typeof x==='string' && /^\d{1,32}$(?![\s\S])/.test(x)) || typeof b.deaf!=='boolean' || typeof b.mute!=='boolean' || !Number.isSafeInteger(b.flags) || (b.flags as number)<0 || (b.pending!==undefined && typeof b.pending!=='boolean')) return false;
+ return validMemberDate(b.joined_at) && (b.premium_since===undefined || validMemberDate(b.premium_since)) && (b.communication_disabled_until===undefined || validMemberDate(b.communication_disabled_until));
+}
 function redirect(url: string, cookies: string[] = []) { const h = new Headers(headers); h.set('Location', url); for (const c of cookies) h.append('Set-Cookie', c); return new Response(null, { status: 302, headers: h }); }
 async function session(req: Request, env: Env) { const id = cookie(req, '__Host-session'); if (!/^[a-f0-9]{64}$/.test(id)) return null; return env.DB.prepare('SELECT user_id, csrf_hash FROM sessions WHERE session_hash=? AND expires>?').bind(await hash(id), now()).first<{ user_id: string; csrf_hash: string }>(); }
 async function handler(req: Request, env: Env): Promise<Response> {
  const u = new URL(req.url); const origin = env.ORIGIN;
  if (u.pathname === '/auth/login' && req.method === 'GET') {
   if (!origin || !env.DISCORD_CLIENT_ID || !env.DISCORD_CLIENT_SECRET || u.origin !== origin) return json({ error: 'OAuth not configured' }, 503);
-  const params=[...u.searchParams]; let context: {owner:string;id:string;version:number}|null=null;
+  const params=[...u.searchParams]; let context: {owner:string;id:string;version:number;guild:string|null}|null=null;
   if(params.length) {
    if(params.length!==3 || !['owner','activity_id','rule_version'].every(k=>u.searchParams.getAll(k).length===1)) return json({error:'invalid login context'},400);
    const owner=u.searchParams.get('owner')!,id=u.searchParams.get('activity_id')!,v=u.searchParams.get('rule_version')!;
    if(!/^\d{1,32}$/.test(owner)||!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id)||!/^[1-9]\d*$/.test(v)||!Number.isSafeInteger(Number(v)))return json({error:'invalid login context'},400);
-   const found=await env.DB.prepare("SELECT id FROM activities WHERE id=? AND owner_id=? AND rule_version=? AND status IN ('initializing','open','paused','settling','cancelling')").bind(id,owner,Number(v)).first();
-   if(!found)return json({error:'stale activity or rules'},409); context={owner,id,version:Number(v)};
+   const found=await env.DB.prepare("SELECT guild_id FROM activities WHERE id=? AND owner_id=? AND rule_version=? AND status IN ('initializing','open','paused','settling','cancelling')").bind(id,owner,Number(v)).first<{guild_id:string|null}>();
+   if(!found)return json({error:'stale activity or rules'},409); context={owner,id,version:Number(v),guild:found.guild_id};
   }
   const day=Math.floor(now()/86400); await env.DB.prepare('DELETE FROM login_budget WHERE day<>?').bind(day).run();
   const budget=await env.DB.prepare('INSERT INTO login_budget VALUES (?,1) ON CONFLICT(day) DO UPDATE SET starts=starts+1 WHERE starts<1000 RETURNING starts').bind(day).first(); if (!budget) return json({error:'login capacity'},503);
   await env.DB.batch([env.DB.prepare('DELETE FROM oauth_states WHERE state_hash IN (SELECT state_hash FROM oauth_states WHERE expires<=? LIMIT 100)').bind(now()),env.DB.prepare('DELETE FROM sessions WHERE session_hash IN (SELECT session_hash FROM sessions WHERE expires<=? LIMIT 100)').bind(now())]);
   const state = random(), verifier = random(); const admitted = await env.DB.prepare('INSERT INTO oauth_states SELECT ?,?,? WHERE (SELECT COUNT(*) FROM oauth_states)<1000 RETURNING state_hash').bind(await hash(state), now()+300, verifier).first(); if (!admitted) return json({error:'login capacity'},503);
-  if(context) { await env.DB.batch([env.DB.prepare('DELETE FROM viewer_oauth_context WHERE expires<=?').bind(now()),env.DB.prepare('DELETE FROM viewer_login_intents WHERE expires<=?').bind(now()),env.DB.prepare('INSERT INTO viewer_oauth_context VALUES (?,?,?,?,?)').bind(await hash(state),context.owner,context.id,context.version,now()+300)]); }
+  if(context) { await env.DB.batch([env.DB.prepare('DELETE FROM viewer_oauth_context WHERE expires<=?').bind(now()),env.DB.prepare('DELETE FROM viewer_login_intents WHERE expires<=?').bind(now()),env.DB.prepare('INSERT INTO viewer_oauth_context (state_hash,owner_id,activity_id,rule_version,expires,guild_id) VALUES (?,?,?,?,?,?)').bind(await hash(state),context.owner,context.id,context.version,now()+300,context.guild)]); }
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  const a = new URL('https://discord.com/oauth2/authorize'); a.search = new URLSearchParams({ client_id: env.DISCORD_CLIENT_ID, redirect_uri: origin + '/auth/callback', response_type: 'code', scope: 'identify', state, code_challenge: challenge, code_challenge_method:'S256' }).toString();
+  const a = new URL('https://discord.com/oauth2/authorize'); a.search = new URLSearchParams({ client_id: env.DISCORD_CLIENT_ID, redirect_uri: origin + '/auth/callback', response_type: 'code', scope: context?.guild ? 'identify guilds.members.read' : 'identify', state, code_challenge: challenge, code_challenge_method:'S256' }).toString();
   return redirect(a.toString(), [setCookie(context ? '__Host-oauth-'+state : '__Host-oauth', state, 300)]);
  }
  if (u.pathname === '/auth/callback' && req.method === 'GET') {
@@ -37,21 +53,35 @@ async function handler(req: Request, env: Env): Promise<Response> {
   const used = await env.DB.prepare('DELETE FROM oauth_states WHERE state_hash=? AND expires>? RETURNING verifier').bind(await hash(state), now()).first<{verifier:string}>();
   if (!used) return json({error:'invalid authorization'},400);
   const viewerFlow=state===cookie(req,'__Host-oauth-'+state);
-  const context=viewerFlow ? await env.DB.prepare('DELETE FROM viewer_oauth_context WHERE state_hash=? AND expires>? RETURNING owner_id,activity_id,rule_version').bind(await hash(state),now()).first<{owner_id:string;activity_id:string;rule_version:number}>() : null;
+  const context=viewerFlow ? await env.DB.prepare('DELETE FROM viewer_oauth_context WHERE state_hash=? AND expires>? RETURNING owner_id,activity_id,rule_version,guild_id').bind(await hash(state),now()).first<{owner_id:string;activity_id:string;rule_version:number;guild_id:string|null}>() : null;
   if(viewerFlow&&!context)return json({error:'invalid authorization'},400);
   const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {method:'POST', redirect:'manual', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({client_id:env.DISCORD_CLIENT_ID,client_secret:env.DISCORD_CLIENT_SECRET,grant_type:'authorization_code',code,redirect_uri:origin+'/auth/callback',code_verifier:used.verifier})});
   if (!tokenResponse.ok) return json({error:'provider failed'},502);
-  const token = await tokenResponse.json<{access_token?:string; token_type?:string}>(); if (!token.access_token || token.token_type?.toLowerCase() !== 'bearer') return json({error:'provider failed'},502);
+  const token = await tokenResponse.json<{access_token?:string; token_type?:string;scope?:unknown}>(); if (typeof token.access_token!=='string' || !token.access_token || typeof token.token_type!=='string' || token.token_type.toLowerCase() !== 'bearer' || typeof token.scope!=='string' || !token.scope.split(' ').includes('identify') || (context?.guild_id && !token.scope.split(' ').includes('guilds.members.read'))) return json({error:'provider failed'},502);
   const userResponse = await fetch('https://discord.com/api/users/@me', {headers:{Authorization:`Bearer ${token.access_token}`}, redirect:'manual'}); if (!userResponse.ok) return json({error:'provider failed'},502);
-  const user = await userResponse.json<{id?:string}>(); if (!user.id || !/^\d{1,32}$/.test(user.id)) return json({error:'provider failed'},502);
+  const user = await userResponse.json<{id?:string}>(); if (!user || typeof user.id!=='string' || !/^\d{1,32}$(?![\s\S])/.test(user.id)) return json({error:'provider failed'},502);
   const sid=random(), csrf=random(); const admitted=await env.DB.prepare('INSERT INTO sessions SELECT ?,?,?,? WHERE (SELECT COUNT(*) FROM sessions)<1000 RETURNING session_hash').bind(await hash(sid),user.id,await hash(csrf),now()+28800).first(); if (!admitted) return json({error:'login capacity'},503);
-  let destination='/'; if(context) { const intent=random(); await env.DB.prepare('INSERT INTO viewer_login_intents VALUES (?,?,?,?,?,?)').bind(await hash(intent),await hash(sid),context.owner_id,context.activity_id,context.rule_version,now()+1800).run(); destination='/s/'+context.owner_id+'?intent='+intent; }
+  let destination='/'; if(context) {
+   const sidHash=await hash(sid);
+   if(context.guild_id) {
+    let status='providerfailure', retryAfter:number|null=null;
+    try {
+     const response=await fetch('https://discord.com/api/users/@me/guilds/'+context.guild_id+'/member',{headers:{Authorization:`Bearer ${token.access_token}`},redirect:'manual'});
+     if(response.status===404) { const body=await response.json<{code?:unknown}>(); if(body && body.code===10007) status='nonmember'; }
+     else if(response.status===401 || response.status===403) status='reauth';
+     else if(response.status===429) { status='rate'; try { const body=await response.json<{retry_after?:unknown}>(); if(typeof body.retry_after==='number' && Number.isFinite(body.retry_after) && body.retry_after>=0) retryAfter=body.retry_after; } catch {} }
+     else if(response.ok) { const body:unknown=await response.json(); if(memberValid(body,user.id)) status=body.pending ? 'pending' : 'member'; }
+    } catch {}
+    await env.DB.batch([env.DB.prepare('DELETE FROM guild_membership_proofs WHERE expires<=?').bind(now()),env.DB.prepare('INSERT INTO guild_membership_proofs VALUES (?,?,?,?,?,?,?,?,?)').bind(sidHash,user.id,context.owner_id,context.activity_id,context.rule_version,context.guild_id,status,retryAfter,now()+300)]);
+   }
+   const intent=random(); await env.DB.prepare('INSERT INTO viewer_login_intents VALUES (?,?,?,?,?,?)').bind(await hash(intent),sidHash,context.owner_id,context.activity_id,context.rule_version,now()+1800).run(); destination='/s/'+context.owner_id+'?intent='+intent;
+  }
   return redirect(destination,[setCookie('__Host-session',sid,28800),setCookie(context?'__Host-oauth-'+state:'__Host-oauth','',0),setCookie('__Host-csrf',csrf,28800)]);
  }
  const viewerPublic=u.pathname.match(/^\/api\/viewer\/(\d{1,32})$/);
  if(viewerPublic && req.method==='GET') {
   if(u.search) return json({error:'invalid query'},400);
-  const activity=await env.DB.prepare("SELECT a.id,a.status,a.rule_version,CASE WHEN a.guild_id IS NULL THEN 0 ELSE 1 END AS guild_required,(SELECT COUNT(*) FROM registrations r WHERE r.activity_id=a.id AND r.status='registered') AS count FROM activities a WHERE a.owner_id=? AND a.status IN ('initializing','open','paused','settling','cancelling')").bind(viewerPublic[1]).first();
+  const activity=await env.DB.prepare("SELECT a.id,a.status,a.rule_version,a.guild_invite_url,CASE WHEN a.guild_id IS NULL THEN 0 ELSE 1 END AS guild_required,(SELECT COUNT(*) FROM registrations r WHERE r.activity_id=a.id AND r.status='registered') AS count FROM activities a WHERE a.owner_id=? AND a.status IN ('initializing','open','paused','settling','cancelling')").bind(viewerPublic[1]).first();
   return json({activity:activity ?? null});
  }
  if (u.pathname.startsWith('/api/')) {
@@ -67,10 +97,11 @@ async function handler(req: Request, env: Env): Promise<Response> {
    const params=[...u.searchParams];
    if(params.length!==2 || !u.searchParams.has('activity_id') || !u.searchParams.has('rule_version') || !/^[1-9]\d*$/.test(u.searchParams.get('rule_version') ?? ''))return json({error:'invalid query'},400);
    const id=u.searchParams.get('activity_id'),version=Number(u.searchParams.get('rule_version'));
-   const activity=await env.DB.prepare('SELECT status FROM activities WHERE id=? AND owner_id=? AND rule_version=?').bind(id,self[1],version).first<{status:string}>();
+   const activity=await env.DB.prepare('SELECT status,guild_id FROM activities WHERE id=? AND owner_id=? AND rule_version=?').bind(id,self[1],version).first<{status:string;guild_id:string|null}>();
    if(!activity)return json({error:'stale activity or rules'},409);
    const row=await env.DB.prepare('SELECT ordinal,status FROM registrations WHERE activity_id=? AND owner_id=? AND viewer_id=?').bind(id,self[1],s.user_id).first();
    const result=row ?? {ordinal:null,status:null};
+   if(activity.guild_id!==null) { const proof=await env.DB.prepare('SELECT status,retry_after FROM guild_membership_proofs WHERE session_hash=? AND user_id=? AND owner_id=? AND activity_id=? AND rule_version=? AND guild_id=? AND expires>?').bind(await hash(cookie(req,'__Host-session')),s.user_id,self[1],id,version,activity.guild_id,now()).first(); return json({...result,membership:proof ?? {status:'reauth',retry_after:null},...(['cancelled','settled'].includes(activity.status)?{terminal:true}:{})}); }
    return json(['cancelled','settled'].includes(activity.status) ? {...result,terminal:true} : result);
   }
   const registration=u.pathname.match(/^\/api\/viewer\/(\d{1,32})\/register$/);
@@ -81,13 +112,15 @@ async function handler(req: Request, env: Env): Promise<Response> {
    const b=value as Record<string,unknown>;
    if(Object.keys(b).sort().join(',')!=='activity_id,rule_version' || typeof b.activity_id!=='string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(b.activity_id) || !Number.isSafeInteger(b.rule_version))return json({error:'invalid'},400);
    const owner=registration[1],id=b.activity_id;
-   const row=await env.DB.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) SELECT a.id,a.owner_id,?,COALESCE((SELECT MAX(ordinal) FROM registrations WHERE activity_id=a.id),0)+1 FROM activities a JOIN approved_streamers s ON s.user_id=a.owner_id WHERE a.id=? AND a.owner_id=? AND a.rule_version=? AND a.status='open' AND a.guild_id IS NULL AND s.status='approved' ON CONFLICT(activity_id,viewer_id) DO NOTHING RETURNING ordinal,status").bind(s.user_id,id,owner,b.rule_version).first();
+   const sidHash=await hash(cookie(req,'__Host-session'));
+   const row=await env.DB.prepare("INSERT INTO registrations(activity_id,owner_id,viewer_id,ordinal) SELECT a.id,a.owner_id,?,COALESCE((SELECT MAX(ordinal) FROM registrations WHERE activity_id=a.id),0)+1 FROM activities a JOIN approved_streamers s ON s.user_id=a.owner_id JOIN sessions se ON se.session_hash=? AND se.user_id=? AND se.expires>? WHERE a.id=? AND a.owner_id=? AND a.rule_version=? AND a.status='open' AND s.status='approved' AND (a.guild_id IS NULL OR EXISTS (SELECT 1 FROM guild_membership_proofs p WHERE p.session_hash=se.session_hash AND p.user_id=se.user_id AND p.owner_id=a.owner_id AND p.activity_id=a.id AND p.rule_version=a.rule_version AND p.guild_id=a.guild_id AND p.status='member' AND p.expires>?)) ON CONFLICT(activity_id,viewer_id) DO NOTHING RETURNING ordinal,status").bind(s.user_id,sidHash,s.user_id,now(),id,owner,b.rule_version,now()).first();
    if(row)return json(row);
    const state=await env.DB.prepare("SELECT a.status,a.guild_id,s.status AS owner_status FROM activities a JOIN approved_streamers s ON s.user_id=a.owner_id WHERE a.id=? AND a.owner_id=? AND a.rule_version=?").bind(id,owner,b.rule_version).first<{status:string;guild_id:string|null;owner_status:string}>();
    if(!state || state.status!=='open')return json({error:'stale activity or rules'},409);
    if(state.owner_status!=='approved')return json({error:'streamer disabled'},403);
-   if(state.guild_id!==null)return json({error:'需要群資格驗證，尚未可用'},403);
    const existing=await env.DB.prepare('SELECT ordinal,status FROM registrations WHERE activity_id=? AND owner_id=? AND viewer_id=?').bind(id,owner,s.user_id).first();
+   if(existing)return json(existing);
+   if(state.guild_id!==null)return json({error:'需要有效的群資格驗證'},403);
    return existing ? json(existing) : json({error:'conflict'},409);
   }
   if (u.pathname.startsWith('/api/admin/')) {
@@ -111,20 +144,21 @@ async function handler(req: Request, env: Env): Promise<Response> {
   }
   if (u.pathname === '/api/activity-default') {
    if(u.search) return json({error:'invalid query'},400);
-   if(req.method==='GET') { const row=await env.DB.prepare('SELECT guild_id,version FROM activity_defaults WHERE owner_id=?').bind(s.user_id).first(); return json(row ?? {guild_id:null,version:0}); }
+   if(req.method==='GET') { const row=await env.DB.prepare('SELECT guild_id,guild_invite_url,version FROM activity_defaults WHERE owner_id=?').bind(s.user_id).first(); return json(row ?? {guild_id:null,guild_invite_url:null,version:0}); }
    if(req.method==='PUT') {
     let value:unknown; try { value=await req.json(); } catch { return json({error:'invalid'},400); }
     if(!value || typeof value!=='object' || Array.isArray(value)) return json({error:'invalid'},400);
     const b=value as Record<string,unknown>;
-    if(Object.keys(b).sort().join(',')!=='guild_id,version' || !(b.guild_id===null || (typeof b.guild_id==='string' && /^\d{1,32}$/.test(b.guild_id))) || !Number.isSafeInteger(b.version) || (b.version as number)<0 || (b.version as number)>=Number.MAX_SAFE_INTEGER) return json({error:'invalid'},400);
-    const stmt=b.version===0 ? env.DB.prepare("INSERT INTO activity_defaults(owner_id,guild_id,version) SELECT ?,?,1 WHERE EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') ON CONFLICT(owner_id) DO NOTHING RETURNING guild_id,version").bind(s.user_id,b.guild_id,s.user_id) : env.DB.prepare("UPDATE activity_defaults SET guild_id=?,version=version+1 WHERE owner_id=? AND version=? AND EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') RETURNING guild_id,version").bind(b.guild_id,s.user_id,b.version,s.user_id);
+    if(!['guild_id,version','guild_id,guild_invite_url,version'].includes(Object.keys(b).sort().join(',')) || !(b.guild_id===null || (typeof b.guild_id==='string' && /^\d{1,32}$/.test(b.guild_id))) || !validInvite(b.guild_invite_url ?? null) || (b.guild_id===null && b.guild_invite_url!=null) || !Number.isSafeInteger(b.version) || (b.version as number)<0 || (b.version as number)>=Number.MAX_SAFE_INTEGER) return json({error:'invalid'},400);
+    const invite=b.guild_invite_url ?? null;
+    const stmt=b.version===0 ? env.DB.prepare("INSERT INTO activity_defaults(owner_id,guild_id,guild_invite_url,version) SELECT ?,?,?,1 WHERE EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') ON CONFLICT(owner_id) DO NOTHING RETURNING guild_id,guild_invite_url,version").bind(s.user_id,b.guild_id,invite,s.user_id) : env.DB.prepare("UPDATE activity_defaults SET guild_id=?,guild_invite_url=?,version=version+1 WHERE owner_id=? AND version=? AND EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') RETURNING guild_id,guild_invite_url,version").bind(b.guild_id,invite,s.user_id,b.version,s.user_id);
     const row=await stmt.first(); if(row) return json(row);
     const approved=await env.DB.prepare("SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); return approved ? json({error:'conflict'},409) : json({error:'not approved'},403);
    }
   }
   if (u.pathname === '/api/activities/current' && req.method==='GET') {
    if(u.search) return json({error:'invalid query'},400);
-   const state=await env.DB.prepare("SELECT COALESCE((SELECT generation FROM activity_opening_generations WHERE owner_id=?),0) AS opening_generation, (SELECT json_object('id',id,'status',status,'rule_version',rule_version,'guild_id',guild_id,'created_at',created_at,'expected_generation',expected_generation) FROM activities WHERE owner_id=? AND status IN ('initializing','open','paused','settling','cancelling')) AS activity").bind(s.user_id,s.user_id).first<{opening_generation:number;activity:string|null}>();
+   const state=await env.DB.prepare("SELECT COALESCE((SELECT generation FROM activity_opening_generations WHERE owner_id=?),0) AS opening_generation, (SELECT json_object('id',id,'status',status,'rule_version',rule_version,'guild_id',guild_id,'guild_invite_url',guild_invite_url,'created_at',created_at,'expected_generation',expected_generation) FROM activities WHERE owner_id=? AND status IN ('initializing','open','paused','settling','cancelling')) AS activity").bind(s.user_id,s.user_id).first<{opening_generation:number;activity:string|null}>();
    return json({activity:state?.activity ? JSON.parse(state.activity) : null,opening_generation:state?.opening_generation ?? 0});
   }
   const activityMatch=u.pathname.match(/^\/api\/activities\/([a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/);
@@ -133,21 +167,21 @@ async function handler(req: Request, env: Env): Promise<Response> {
    let value:unknown; try { value=await req.json(); } catch { return json({error:'invalid'},400); }
    if(!value || typeof value!=='object' || Array.isArray(value)) return json({error:'invalid'},400);
    const b=value as Record<string,unknown>;
-   if(Object.keys(b).sort().join(',')!=='expected_generation,guild_id,rule_version' || b.rule_version!==1 || !Number.isSafeInteger(b.expected_generation) || (b.expected_generation as number)<0 || (b.expected_generation as number)>=Number.MAX_SAFE_INTEGER || !(b.guild_id===null || (typeof b.guild_id==='string' && /^\d{1,32}$/.test(b.guild_id)))) return json({error:'invalid'},400);
-   const id=activityMatch[1], guild=b.guild_id as string|null, expected=b.expected_generation as number;
-   const lookup=()=>env.DB.prepare('SELECT id,status,rule_version,guild_id,created_at,expected_generation FROM activities WHERE id=? AND owner_id=?').bind(id,s.user_id).first<{id:string;status:string;rule_version:number;guild_id:string|null;created_at:number;expected_generation:number}>();
+   if(!['expected_generation,guild_id,rule_version','expected_generation,guild_id,guild_invite_url,rule_version'].includes(Object.keys(b).sort().join(',')) || b.rule_version!==1 || !Number.isSafeInteger(b.expected_generation) || (b.expected_generation as number)<0 || (b.expected_generation as number)>=Number.MAX_SAFE_INTEGER || !(b.guild_id===null || (typeof b.guild_id==='string' && /^\d{1,32}$/.test(b.guild_id))) || !validInvite(b.guild_invite_url ?? null) || (b.guild_id===null && b.guild_invite_url!=null)) return json({error:'invalid'},400);
+   const id=activityMatch[1], guild=b.guild_id as string|null, invite=(b.guild_invite_url ?? null) as string|null, expected=b.expected_generation as number;
+   const lookup=()=>env.DB.prepare('SELECT id,status,rule_version,guild_id,guild_invite_url,created_at,expected_generation FROM activities WHERE id=? AND owner_id=?').bind(id,s.user_id).first<{id:string;status:string;rule_version:number;guild_id:string|null;guild_invite_url:string|null;created_at:number;expected_generation:number}>();
    const existing=await lookup();
-   if(existing) return existing.rule_version===1 && existing.guild_id===guild && existing.expected_generation===expected ? json({activity:existing}) : json({error:'conflict'},409);
+   if(existing) return existing.rule_version===1 && existing.guild_id===guild && existing.guild_invite_url===invite && existing.expected_generation===expected ? json({activity:existing}) : json({error:'conflict'},409);
    try {
     const results=await env.DB.batch([
-     env.DB.prepare("INSERT INTO activities(id,owner_id,status,rule_version,guild_id,created_at,expected_generation) SELECT ?,?,'initializing',1,?,?,? WHERE EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') AND COALESCE((SELECT generation FROM activity_opening_generations WHERE owner_id=?),0)=?").bind(id,s.user_id,guild,now(),expected,s.user_id,s.user_id,expected),
+     env.DB.prepare("INSERT INTO activities(id,owner_id,status,rule_version,guild_id,guild_invite_url,created_at,expected_generation) SELECT ?,?,'initializing',1,?,?,?,? WHERE EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved') AND COALESCE((SELECT generation FROM activity_opening_generations WHERE owner_id=?),0)=?").bind(id,s.user_id,guild,invite,now(),expected,s.user_id,s.user_id,expected),
      env.DB.prepare("INSERT INTO activity_opening_generations(owner_id,generation) SELECT ?,?+1 WHERE EXISTS (SELECT 1 FROM activities WHERE id=? AND owner_id=? AND status='initializing' AND expected_generation=?) ON CONFLICT(owner_id) DO UPDATE SET generation=excluded.generation WHERE activity_opening_generations.generation=?").bind(s.user_id,expected,id,s.user_id,expected,expected),
      env.DB.prepare("INSERT INTO activity_score_baselines(activity_id,owner_id,viewer_id,score) SELECT ?,owner_id,viewer_id,score FROM viewer_scores WHERE owner_id=? AND score>0 AND EXISTS (SELECT 1 FROM activities WHERE id=? AND owner_id=? AND status='initializing')").bind(id,s.user_id,id,s.user_id),
      env.DB.prepare("UPDATE activities SET status='open' WHERE id=? AND owner_id=? AND status='initializing' AND EXISTS (SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved')").bind(id,s.user_id,s.user_id)
     ]);
-    if(!results[0].meta.changes) { const retry=await lookup(); if(retry) return retry.guild_id===guild && retry.expected_generation===expected ? json({activity:retry}) : json({error:'conflict'},409); const approved=await env.DB.prepare("SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); return approved ? json({error:'conflict'},409) : json({error:'not approved'},403); }
+    if(!results[0].meta.changes) { const retry=await lookup(); if(retry) return retry.guild_id===guild && retry.guild_invite_url===invite && retry.expected_generation===expected ? json({activity:retry}) : json({error:'conflict'},409); const approved=await env.DB.prepare("SELECT 1 FROM approved_streamers WHERE user_id=? AND status='approved'").bind(s.user_id).first(); return approved ? json({error:'conflict'},409) : json({error:'not approved'},403); }
    } catch {
-    const retry=await lookup(); if(retry) return retry.rule_version===1 && retry.guild_id===guild && retry.expected_generation===expected ? json({activity:retry}) : json({error:'conflict'},409);
+    const retry=await lookup(); if(retry) return retry.rule_version===1 && retry.guild_id===guild && retry.guild_invite_url===invite && retry.expected_generation===expected ? json({activity:retry}) : json({error:'conflict'},409);
     const conflict=await env.DB.prepare("SELECT 1 FROM activities WHERE id=? OR (owner_id=? AND status IN ('initializing','open','paused','settling','cancelling')) LIMIT 1").bind(id,s.user_id).first();
     return conflict ? json({error:'conflict'},409) : json({error:'request failed'},500);
    }
