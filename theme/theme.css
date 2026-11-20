@@ -1,0 +1,17 @@
+/* Original geometric theme only; no official game assets are included. */
+:root {
+  --win-font: ui-serif, Georgia, serif;
+  --win-bg: #101c20;
+  --win-text: #e5eeeb;
+  --win-muted: #c1d2cb;
+  --win-panel: #1b3031;
+  --win-panel-start: #213b3a;
+  --win-panel-end: #142b2c;
+  --win-input: #0f2021;
+  --win-border: #536d62;
+  --win-input-border: #97aba2;
+  --win-accent: #d5ab69;
+  --win-accent-hover: #eed0a0;
+  --win-accent-text: #172323;
+  --win-highlight: #f2d5a3;
+}

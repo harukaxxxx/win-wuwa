@@ -1,0 +1,20 @@
+{
+  "name": "win-wuwa-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node scripts/build-theme.mjs && wrangler deploy --dry-run --outdir dist",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "dev": "node scripts/build-theme.mjs && wrangler dev --local --ip 127.0.0.1"
+  },
+  "dependencies": {
+    "who-is-next": "file:../who-is-next"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261108.1",
+    "miniflare": "5.20261104.0-beta",
+    "typescript": "7.0.2",
+    "wrangler": "4.158.0"
+  }
+}

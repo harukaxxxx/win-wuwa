@@ -1,0 +1,55 @@
+name: theme checks
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: win-wuwa
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.1'
+      - name: Validate the pinned core reference
+        id: core
+        working-directory: win-wuwa
+        # Validate file data before exposing it as a checkout ref; never execute it.
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync, appendFileSync} from 'node:fs';
+          import assert from 'node:assert/strict';
+          const pin = JSON.parse(readFileSync('core-ref.json', 'utf8'));
+          assert.equal(pin.repository, 'harukaxxxx/who-is-next');
+          assert.equal(typeof pin.commit, 'string');
+          assert.equal(pin.commit.length, 40);
+          assert.match(pin.commit, /^[a-f0-9]{40}$/);
+          appendFileSync(process.env.GITHUB_OUTPUT, `commit=${pin.commit}\n`);
+          NODE
+      - uses: actions/checkout@v4
+        with:
+          repository: harukaxxxx/who-is-next
+          ref: ${{ steps.core.outputs.commit }}
+          path: who-is-next
+          persist-credentials: false
+      - name: Verify the exact core checkout
+        env:
+          CORE_COMMIT: ${{ steps.core.outputs.commit }}
+        run: test "$(git -C who-is-next rev-parse HEAD)" = "$CORE_COMMIT"
+      - run: npm ci
+        working-directory: who-is-next
+      - run: npm run typecheck && npm test && npm audit
+        working-directory: who-is-next
+      - run: npm ci
+        working-directory: win-wuwa
+      - run: npm run typecheck && npm test && npm audit
+        working-directory: win-wuwa
